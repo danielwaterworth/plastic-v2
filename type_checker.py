@@ -26,6 +26,9 @@ class TypeLevelExpr:
     def kind(self):
         raise NotImplementedError()
 
+    def substitutable_for(self, other):
+        return self == other
+
 class Void(TypeLevelExpr):
     kind = star
 
@@ -40,6 +43,11 @@ class Ptr(TypeLevelExpr):
 
 class OpaquePtr(TypeLevelExpr):
     kind = star
+
+    def substitutable_for(self, other):
+        return \
+            type(other) == TypeApplication and \
+            type(other.function) == Ptr
 
 class Boolean(TypeLevelExpr):
     kind = star
@@ -106,6 +114,11 @@ class Extern(TypeLevelExpr):
     @property
     def kind(self):
         return FunctionKind([star] * len(self.arg_types), self.return_type.kind)
+
+def list_substitutable_for(args, expected):
+    return \
+        len(args) == len(expected) and \
+        all([arg.substitutable_for(exp) for arg, exp in zip(args, expected)])
 
 class TypedASTNode:
     def __init__(self, tag, **kwargs):
@@ -228,7 +241,7 @@ class Environment:
             arg_types = [arg.ty for arg in args]
             if type(function.ty.kind) != FunctionKind:
                 raise TypeError()
-            if tuple(function.ty.arg_types) != tuple(arg_types):
+            if not list_substitutable_for(function.ty.arg_types, arg_types):
                 raise TypeError()
             return \
                 TypedASTNode(
@@ -280,7 +293,10 @@ class Environment:
         elif expr.tag == '==':
             a = self.check_expression(expr.a)
             b = self.check_expression(expr.b)
-            if a.ty != b.ty:
+            compatible = \
+                a.ty.substitutable_for(b.ty) or \
+                b.ty.substitutable_for(a.ty)
+            if not compatible:
                 raise TypeError()
             return \
                 TypedASTNode(
