@@ -3,7 +3,7 @@ import sys
 class ParseError(Exception):
     pass
 
-class Thing:
+class ASTNode:
     def __init__(self, tag, **kwargs):
         self.tag = tag
         self.attributes = kwargs
@@ -11,7 +11,7 @@ class Thing:
             setattr(self, key, value)
 
     def __repr__(self):
-        return "Thing(%s, %s)" % (repr(self.tag), repr(self.attributes))
+        return "ASTNode(%s, %s)" % (repr(self.tag), repr(self.attributes))
 
 class Parser:
     def __init__(self, remaining):
@@ -100,12 +100,12 @@ class Parser:
     def parse_type(self):
         name = self.parse_identifier()
         self.skip_ws()
-        output = Thing('named_type', name = name)
+        output = ASTNode('named_type', name = name)
         if self.next == '(':
             self.advance(1)
             self.skip_ws()
             return \
-                Thing(
+                ASTNode(
                     'type_application',
                     function = output,
                     args = self.parse_type_arg_list(),
@@ -137,7 +137,7 @@ class Parser:
                 self.discard()
 
         return \
-            Thing(
+            ASTNode(
                 'enum',
                 name = name,
                 constructors = [],
@@ -167,7 +167,7 @@ class Parser:
                 self.discard()
 
         return \
-            Thing(
+            ASTNode(
                 'struct',
                 name = name,
                 fields = [],
@@ -204,7 +204,7 @@ class Parser:
             c = self.next
             self.advance(1)
             self.expect('\'')
-            return Thing('character_literal', character = c)
+            return ASTNode('character_literal', character = c)
         elif self.next == '"':
             self.advance(1)
             st = ""
@@ -212,7 +212,7 @@ class Parser:
                 st += self.next
                 self.advance(1)
             self.advance(1)
-            return Thing('string_literal', string = st)
+            return ASTNode('string_literal', string = st)
         else:
             self.save()
             try:
@@ -224,13 +224,13 @@ class Parser:
                 self.skip_ws()
                 if name == 'yield':
                     expr = self.parse_expression()
-                    return Thing('yield_expression', expr = expr)
+                    return ASTNode('yield_expression', expr = expr)
                 else:
-                    return Thing('variable', name = name)
+                    return ASTNode('variable', name = name)
 
             n = self.parse_number()
             self.skip_ws()
-            return Thing('number_literal', n = n)
+            return ASTNode('number_literal', n = n)
 
     def parse_expression_1(self):
         expr = self.parse_expression_0()
@@ -240,13 +240,13 @@ class Parser:
                 self.advance(1)
                 args = self.parse_term_arg_list()
                 self.skip_ws()
-                expr = Thing('application', f = expr, args = args)
+                expr = ASTNode('application', f = expr, args = args)
             elif self.next == '.':
                 self.advance(1)
                 self.skip_ws()
                 field = self.parse_identifier()
                 self.skip_ws()
-                expr = Thing('field_access', x = expr, field = field)
+                expr = ASTNode('field_access', x = expr, field = field)
             else:
                 break
         return expr
@@ -262,7 +262,7 @@ class Parser:
                     self.discard()
                     self.skip_ws()
                     type = self.parse_type()
-                    expr = Thing('cast', expr = expr, type = type)
+                    expr = ASTNode('cast', expr = expr, type = type)
                 else:
                     self.restore()
                     break
@@ -282,7 +282,7 @@ class Parser:
                     self.discard()
                     self.skip_ws()
                     other = self.parse_expression_2()
-                    expr = Thing('-', a = expr, b = other)
+                    expr = ASTNode('-', a = expr, b = other)
                 else:
                     self.restore()
                     break
@@ -303,7 +303,7 @@ class Parser:
                     self.discard()
                     other = self.parse_expression_3()
                     self.skip_ws()
-                    expr = Thing('==', a = expr, b = other)
+                    expr = ASTNode('==', a = expr, b = other)
                 else:
                     self.restore()
                     break
@@ -326,7 +326,7 @@ class Parser:
         self.skip_ws()
         expr = self.parse_expression()
         self.expect(';')
-        return Thing('let_statement', name = name, expr = expr)
+        return ASTNode('let_statement', name = name, expr = expr)
 
     def parse_loop_statement(self):
         name = self.parse_identifier()
@@ -336,7 +336,7 @@ class Parser:
         self.expect('{')
         self.skip_ws()
         body = self.parse_body()
-        return Thing('loop_statement', body = body)
+        return ASTNode('loop_statement', body = body)
 
     def parse_if_statement(self):
         name = self.parse_identifier()
@@ -358,7 +358,7 @@ class Parser:
         false_side = self.parse_body()
 
         return \
-            Thing(
+            ASTNode(
                 'if_statement',
                 condition = condition,
                 true_side = true_side,
@@ -376,7 +376,7 @@ class Parser:
         self.skip_ws()
         self.expect(';')
         self.skip_ws()
-        return Thing('assignment', name = name, expr = expr)
+        return ASTNode('assignment', name = name, expr = expr)
 
     def parse_break(self):
         name = self.parse_identifier()
@@ -385,7 +385,7 @@ class Parser:
         self.skip_ws()
         self.expect(';')
         self.skip_ws()
-        return Thing('break')
+        return ASTNode('break')
 
     def parse_statement(self):
         self.save()
@@ -436,7 +436,7 @@ class Parser:
         expr = self.parse_expression()
         self.skip_ws()
         self.expect(';')
-        return Thing('expr_statement', expr = expr)
+        return ASTNode('expr_statement', expr = expr)
 
     def parse_body(self):
         statements = []
@@ -541,7 +541,7 @@ class Parser:
         body = self.parse_body()
 
         return \
-            Thing(
+            ASTNode(
                 'function',
                 name = name,
                 args = args,
@@ -556,7 +556,7 @@ class Parser:
         self.skip_ws()
 
         arg_types = []
-        return_type = Thing('void')
+        return_type = ASTNode('void')
 
         self.save()
         try:
@@ -595,7 +595,7 @@ class Parser:
             self.restore()
 
         return \
-            Thing(
+            ASTNode(
                 'extern',
                 name = name,
                 arg_types = arg_types,
