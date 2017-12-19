@@ -236,12 +236,12 @@ class Parser:
         while not self.eof():
             self.save()
             try:
-                symbol = self.parse_symbol()
-                if symbol == '-':
+                symbol = self.parse_identifier()
+                if symbol == 'as':
                     self.discard()
                     self.skip_ws()
-                    other = self.parse_expression_1()
-                    expr = Thing('-', a = expr, b = other)
+                    type = self.parse_type()
+                    expr = Thing('cast', expr = expr, type = type)
                 else:
                     self.restore()
                     break
@@ -257,10 +257,30 @@ class Parser:
             self.save()
             try:
                 symbol = self.parse_symbol()
+                if symbol == '-':
+                    self.discard()
+                    self.skip_ws()
+                    other = self.parse_expression_2()
+                    expr = Thing('-', a = expr, b = other)
+                else:
+                    self.restore()
+                    break
+            except ParseError:
+                self.restore()
+                break
+        return expr
+
+    def parse_expression_4(self):
+        expr = self.parse_expression_3()
+        self.skip_ws()
+        while not self.eof():
+            self.save()
+            try:
+                symbol = self.parse_symbol()
                 self.skip_ws()
                 if symbol == '==':
                     self.discard()
-                    other = self.parse_expression_2()
+                    other = self.parse_expression_3()
                     self.skip_ws()
                     expr = Thing('==', a = expr, b = other)
                 else:
@@ -272,7 +292,7 @@ class Parser:
         return expr
 
     def parse_expression(self):
-        return self.parse_expression_3()
+        return self.parse_expression_4()
 
     def parse_let_statement(self):
         name = self.parse_identifier()
@@ -337,6 +357,15 @@ class Parser:
         self.skip_ws()
         return Thing('assignment', name = name, expr = expr)
 
+    def parse_break(self):
+        name = self.parse_identifier()
+        if name != 'break':
+            raise ParseError()
+        self.skip_ws()
+        self.expect(';')
+        self.skip_ws()
+        return Thing('break')
+
     def parse_statement(self):
         self.save()
         try:
@@ -368,6 +397,15 @@ class Parser:
         self.save()
         try:
             statement = self.parse_assignment()
+        except ParseError:
+            self.restore()
+        else:
+            self.discard()
+            return statement
+
+        self.save()
+        try:
+            statement = self.parse_break()
         except ParseError:
             self.restore()
         else:
