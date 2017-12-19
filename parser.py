@@ -55,11 +55,13 @@ class Parser:
 
     def parse_identifier(self):
         output = ""
+        if not self.next.isalpha():
+            raise ParseError()
+        output += self.next
+        self.advance(1)
         while not self.eof() and self.next_is_valid_identifier_char():
             output += self.next
             self.advance(1)
-        if len(output) == 0:
-            raise ParseError()
         return output
 
     def parse_symbol(self):
@@ -70,6 +72,15 @@ class Parser:
         if len(output) == 0:
             raise ParseError()
         return output
+
+    def parse_number(self):
+        output = ""
+        while not self.eof() and self.next.isdigit():
+            output += self.next
+            self.advance(1)
+        if len(output) == 0:
+            raise ParseError()
+        return int(output)
 
     def parse_type_arg_list(self):
         things = []
@@ -203,13 +214,23 @@ class Parser:
             self.advance(1)
             return Thing('string_literal', string = st)
         else:
-            name = self.parse_identifier()
-            self.skip_ws()
-            if name == 'yield':
-                expr = self.parse_expression()
-                return Thing('yield_expression', expr = expr)
+            self.save()
+            try:
+                name = self.parse_identifier()
+            except ParseError:
+                self.restore()
             else:
-                return Thing('variable', name = name)
+                self.discard()
+                self.skip_ws()
+                if name == 'yield':
+                    expr = self.parse_expression()
+                    return Thing('yield_expression', expr = expr)
+                else:
+                    return Thing('variable', name = name)
+
+            n = self.parse_number()
+            self.skip_ws()
+            return Thing('number_literal', n = n)
 
     def parse_expression_1(self):
         expr = self.parse_expression_0()
