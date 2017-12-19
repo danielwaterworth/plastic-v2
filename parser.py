@@ -140,7 +140,7 @@ class Parser:
             ASTNode(
                 'enum',
                 name = name,
-                constructors = [],
+                constructors = constructors,
             )
 
     def parse_struct(self):
@@ -170,7 +170,7 @@ class Parser:
             ASTNode(
                 'struct',
                 name = name,
-                fields = [],
+                fields = fields,
             )
 
     def parse_term_arg_list(self):
@@ -240,7 +240,7 @@ class Parser:
                 self.advance(1)
                 args = self.parse_term_arg_list()
                 self.skip_ws()
-                expr = ASTNode('application', f = expr, args = args)
+                expr = ASTNode('application', function = expr, args = args)
             elif self.next == '.':
                 self.advance(1)
                 self.skip_ws()
@@ -463,7 +463,7 @@ class Parser:
         args = []
         product_type = None
         consume_type = None
-        return_type = None
+        return_type = ASTNode('named_type', name = 'void')
         body = None
 
         self.save()
@@ -623,6 +623,3 @@ class Parser:
             decls.append(self.parse_top_level_decl())
             self.skip_ws()
         return decls
-
-with open(sys.argv[1], 'r') as fd:
-    print(Parser(fd.read()).parse_file())
