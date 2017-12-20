@@ -1,5 +1,4 @@
 import parser
-import sys
 
 class Kind:
     pass
@@ -37,6 +36,8 @@ class Void(TypeLevelExpr):
 
     def __eq__(self, other):
         return type(other) == Void
+
+void = Void()
 
 class Ptr(TypeLevelExpr):
     kind = FunctionKind([star], star)
@@ -190,19 +191,23 @@ class TypedASTNode:
         return "TypedASTNode(%s, %s)" % (repr(self.tag), repr(self.attributes))
 
 class Environment:
-    def __init__(self, type_bindings, term_bindings, parent=None, product_type=None, consume_type=None):
+    def __init__(self, type_bindings, term_bindings, parent=None, product_type=None, consume_type=None, return_type=None):
         self.type_bindings = type_bindings
         self.term_bindings = term_bindings
         self.parent = parent
         self.product_type = None
         self.consume_type = None
+        self.return_type = None
         if parent:
             self.product_type = parent.product_type
             self.consume_type = parent.consume_type
+            self.return_type = parent.return_type
         if product_type:
             self.product_type = product_type
         if consume_type:
             self.consume_type = consume_type
+        if return_type:
+            self.return_type = return_type
 
     def lookup_type(self, key):
         try:
@@ -254,6 +259,7 @@ class Environment:
         return \
             TypedASTNode(
                 'struct',
+                name = decl.name,
                 fields = fields,
             )
 
@@ -269,6 +275,7 @@ class Environment:
         return \
             TypedASTNode(
                 'enum',
+                name = decl.name,
                 constructors = constructors,
             )
 
@@ -280,6 +287,7 @@ class Environment:
         return \
             TypedASTNode(
                 'extern',
+                name = decl.name,
                 arg_types = arg_types,
                 return_type = return_type,
             )
@@ -371,6 +379,19 @@ class Environment:
                     a = a,
                     b = b,
                     ty = Boolean(),
+                )
+        elif expr.tag == '+':
+            a = self.check_expression(expr.a)
+            b = self.check_expression(expr.b)
+            compatible = a.ty == b.ty
+            if not compatible:
+                raise TypeError()
+            return \
+                TypedASTNode(
+                    '+',
+                    a = a,
+                    b = b,
+                    ty = a.ty,
                 )
         elif expr.tag == '-':
             a = self.check_expression(expr.a)
@@ -491,6 +512,17 @@ class Environment:
                         expr = expr,
                     )
                 new_env = self
+            elif first_statement.tag == 'return':
+                expr = self.check_expression(first_statement.expr)
+                if expr.ty != self.return_type:
+                    raise TypeError()
+                statement = \
+                    TypedASTNode(
+                        'return',
+                        expr = expr,
+                        ty = void,
+                    )
+                new_env = self
             else:
                 print(first_statement.tag)
                 raise NotImplementedError()
@@ -523,11 +555,20 @@ class Environment:
                     return_type,
                 )
 
-        new_env = Environment({}, dict(args), self, product_type, consume_type)
+        new_env = \
+            Environment(
+                {},
+                dict(args),
+                self,
+                product_type,
+                consume_type,
+                return_type
+            )
         body = new_env.check_body(decl.body)
         return \
             TypedASTNode(
                 'function',
+                name = decl.name,
                 args = args,
                 consume_type = consume_type,
                 product_type = product_type,
@@ -550,7 +591,7 @@ class Environment:
         return [self.check_top_level_decl(decl) for decl in decls]
 
 global_type_environment = {
-    'void': Void(),
+    'void': void,
     'ptr': ptr,
     'i8': char,
     'i32': Number(True, 32),
@@ -580,12 +621,3 @@ global_term_environment = {
             )
         )
 }
-
-with open(sys.argv[1], 'r') as fd:
-    decls = parser.Parser(fd.read()).parse_file()
-    env = \
-        Environment(
-            global_type_environment,
-            global_term_environment,
-        )
-    env.check_top_level_decls(decls)

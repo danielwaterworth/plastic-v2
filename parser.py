@@ -1,5 +1,3 @@
-import sys
-
 class ParseError(Exception):
     pass
 
@@ -46,8 +44,14 @@ class Parser:
         self.remaining = self.remaining[n:]
 
     def skip_ws(self):
-        while not self.eof() and self.next in ' \n\t\r':
-            self.advance(1)
+        while True:
+            while not self.eof() and self.next in ' \n\t\r':
+                self.advance(1)
+            if not self.eof() and self.next == '#':
+                while not self.eof() and self.next != '\n':
+                    self.advance(1)
+            else:
+                break
 
     def next_is_valid_identifier_char(self):
         next = self.next
@@ -290,6 +294,11 @@ class Parser:
                     self.skip_ws()
                     other = self.parse_expression_2()
                     expr = ASTNode('-', a = expr, b = other)
+                elif symbol == '+':
+                    self.discard()
+                    self.skip_ws()
+                    other = self.parse_expression_2()
+                    expr = ASTNode('+', a = expr, b = other)
                 else:
                     self.restore()
                     break
@@ -394,6 +403,17 @@ class Parser:
         self.skip_ws()
         return ASTNode('break')
 
+    def parse_return(self):
+        name = self.parse_identifier()
+        if name != 'return':
+            raise ParseError()
+        self.skip_ws()
+        expr = self.parse_expression()
+        self.skip_ws()
+        self.expect(';')
+        self.skip_ws()
+        return ASTNode('return', expr = expr)
+
     def parse_statement(self):
         self.save()
         try:
@@ -434,6 +454,15 @@ class Parser:
         self.save()
         try:
             statement = self.parse_break()
+        except ParseError:
+            self.restore()
+        else:
+            self.discard()
+            return statement
+
+        self.save()
+        try:
+            statement = self.parse_return()
         except ParseError:
             self.restore()
         else:
