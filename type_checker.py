@@ -29,6 +29,9 @@ class TypeLevelExpr:
     def substitutable_for(self, other):
         return self == other
 
+    def substitute(self, substitutions):
+        return self
+
 class Void(TypeLevelExpr):
     kind = star
 
@@ -86,6 +89,13 @@ class TypeApplication(TypeLevelExpr):
     def kind(self):
         return self.function.kind.return_kind
 
+    def substitute(self, substitutions):
+        return \
+            TypeApplication(
+                self.function.substitute(substitutions),
+                [arg.substitute(substitutions) for arg in self.args],
+            )
+
     def __eq__(self, other):
         return \
             type(other) == TypeApplication and \
@@ -110,14 +120,48 @@ class EnumType(TypeLevelExpr):
 class Coroutine(TypeLevelExpr):
     kind = FunctionKind([star] * 3, star)
 
+    def __eq__(self, other):
+        return type(other) == Coroutine
+
 class FunctionType(TypeLevelExpr):
     def __init__(self, arg_types, return_type):
         self.arg_types = arg_types
         self.return_type = return_type
 
+    def substitute(self, substitutions):
+        return \
+            FunctionType(
+                [arg.substitute(substitutions) for arg in self.arg_types],
+                self.return_type.substitute(substitutions),
+            )
+
     @property
     def kind(self):
         return star
+
+class TypeVariable(TypeLevelExpr):
+    def __init__(self, name):
+        self.name = name
+
+    def substitute(self, substitutions):
+        return substitutions.get(self.name, self)
+
+class LambdaType(TypeLevelExpr):
+    def __init__(self, args, body):
+        self.args = args
+        self.body = body
+
+    def apply_type_args(self, args):
+        if len(args) != len(self.args):
+            raise TypeError()
+
+        return self.body.substitute(dict(zip(self.args, args)))
+
+    def substitute(self, substitutions):
+        substitutions = dict(substitutions)
+        for arg in self.args:
+            del substitutions[arg]
+        return self.body.substitute(substitutions)
 
 char = Number(True, 8)
 char_ptr = ptr_to(char)
@@ -259,6 +303,8 @@ class Environment:
             if type(function.ty) != FunctionType:
                 raise TypeError()
             if not list_substitutable_for(arg_types, function.ty.arg_types):
+                print(arg_types)
+                print(function.ty.arg_types)
                 raise TypeError()
             return \
                 TypedASTNode(
@@ -353,6 +399,22 @@ class Environment:
                     string = expr.string,
                     ty = char_ptr,
                 )
+        elif expr.tag == 'apply_type_args':
+            function = self.check_expression(expr.function)
+            args = self.check_type_list(expr.args)
+            if type(function.ty) != LambdaType:
+                raise TypeError()
+
+            new_type = function.ty.apply_type_args(args)
+            return \
+                TypedASTNode(
+                    'apply_type_args',
+                    function = function,
+                    args = args,
+                    ty = new_type,
+                )
+            raise NotImplementedError()
+
         print(expr.tag)
         raise NotImplementedError()
 
@@ -498,7 +560,25 @@ global_type_environment = {
 }
 
 global_term_environment = {
-    'null': OpaquePtr()
+    'null': OpaquePtr(),
+    'resume':
+        LambdaType(
+            ['a', 'b', 'c'],
+            FunctionType(
+                [
+                    TypeApplication(
+                        Coroutine(),
+                        [
+                            TypeVariable('a'),
+                            TypeVariable('b'),
+                            TypeVariable('c'),
+                        ]
+                    ),
+                    TypeVariable('a'),
+                ],
+                TypeVariable('b'),
+            )
+        )
 }
 
 with open(sys.argv[1], 'r') as fd:

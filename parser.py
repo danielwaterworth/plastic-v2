@@ -247,6 +247,13 @@ class Parser:
                 field = self.parse_identifier()
                 self.skip_ws()
                 expr = ASTNode('field_access', x = expr, field = field)
+            elif self.next == '@':
+                self.advance(1)
+                self.skip_ws()
+                self.expect('(')
+                self.skip_ws()
+                args = self.parse_type_arg_list()
+                expr = ASTNode('apply_type_args', function = expr, args = args)
             else:
                 break
         return expr
