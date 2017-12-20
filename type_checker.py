@@ -41,13 +41,16 @@ class Ptr(TypeLevelExpr):
     def __eq__(self, other):
         return type(other) == Ptr
 
+ptr = Ptr()
+
+def ptr_to(ty):
+    return TypeApplication(ptr, [ty])
+
 class OpaquePtr(TypeLevelExpr):
     kind = star
 
     def substitutable_for(self, other):
-        return \
-            type(other) == TypeApplication and \
-            type(other.function) == Ptr
+        return is_ptr(other)
 
 class Boolean(TypeLevelExpr):
     kind = star
@@ -68,6 +71,12 @@ class Number(TypeLevelExpr):
             self.signed == other.signed and \
             self.width == other.width
 
+class OpaqueNumber(TypeLevelExpr):
+    kind = star
+
+    def substitutable_for(self, other):
+        return type(other) == Number
+
 class TypeApplication(TypeLevelExpr):
     def __init__(self, function, args):
         self.function = function
@@ -83,6 +92,9 @@ class TypeApplication(TypeLevelExpr):
             self.function == other.function and \
             tuple(self.args) == tuple(other.args)
 
+    def __repr__(self):
+        return "TypeApplication(%s, %s)" % (self.function, self.args)
+
 class StructType(TypeLevelExpr):
     kind = star
 
@@ -95,30 +107,33 @@ class EnumType(TypeLevelExpr):
     def __init__(self, name):
         self.name = name
 
-class Constructor(TypeLevelExpr):
-    def __init__(self, name, ty, arg_types):
-        self.name = name
-        self.return_type = ty
+class Coroutine(TypeLevelExpr):
+    kind = FunctionKind([star] * 3, star)
+
+class FunctionType(TypeLevelExpr):
+    def __init__(self, arg_types, return_type):
         self.arg_types = arg_types
+        self.return_type = return_type
 
     @property
     def kind(self):
-        return FunctionKind([star] * len(self.arg_types), self.return_type.kind)
+        return star
 
-class Extern(TypeLevelExpr):
-    def __init__(self, name, arg_types, ty):
-        self.name = name
-        self.return_type = ty
-        self.arg_types = arg_types
-
-    @property
-    def kind(self):
-        return FunctionKind([star] * len(self.arg_types), self.return_type.kind)
+char = Number(True, 8)
+char_ptr = ptr_to(char)
 
 def list_substitutable_for(args, expected):
     return \
         len(args) == len(expected) and \
         all([arg.substitutable_for(exp) for arg, exp in zip(args, expected)])
+
+def is_ptr(x):
+    if type(x) == OpaquePtr:
+        return True
+    if type(x) == TypeApplication:
+        if type(x.function) == Ptr:
+            return True
+    return False
 
 class TypedASTNode:
     def __init__(self, tag, **kwargs):
@@ -128,7 +143,7 @@ class TypedASTNode:
             setattr(self, key, value)
 
     def __repr__(self):
-        return "ASTNode(%s, %s)" % (repr(self.tag), repr(self.attributes))
+        return "TypedASTNode(%s, %s)" % (repr(self.tag), repr(self.attributes))
 
 class Environment:
     def __init__(self, type_bindings, term_bindings, parent=None, product_type=None, consume_type=None):
@@ -189,6 +204,8 @@ class Environment:
         struct_type = StructType(decl.name)
         self.type_bindings[decl.name] = struct_type
         fields = [(name, self.check_type(ty)) for name, ty in decl.fields]
+        self.term_bindings[decl.name] = \
+            FunctionType([ty for _, ty in fields], struct_type)
         struct_type.fields = dict(fields)
         return \
             TypedASTNode(
@@ -203,7 +220,7 @@ class Environment:
             [(name, self.check_type_list(ty)) for name, ty in decl.constructors]
         for name, args in constructors:
             self.term_bindings[name] = \
-                Constructor(name, enum_type, args)
+                FunctionType(args, enum_type)
         enum_type.constructors = constructors
         return \
             TypedASTNode(
@@ -215,7 +232,7 @@ class Environment:
         arg_types = self.check_type_list(decl.arg_types)
         return_type = self.check_type(decl.return_type)
         self.term_bindings[decl.name] = \
-            Extern(decl.name, arg_types, return_type)
+            FunctionType(arg_types, return_type)
         return \
             TypedASTNode(
                 'extern',
@@ -239,9 +256,9 @@ class Environment:
             function = self.check_expression(expr.function)
             args = self.check_expression_list(expr.args)
             arg_types = [arg.ty for arg in args]
-            if type(function.ty.kind) != FunctionKind:
+            if type(function.ty) != FunctionType:
                 raise TypeError()
-            if not list_substitutable_for(function.ty.arg_types, arg_types):
+            if not list_substitutable_for(arg_types, function.ty.arg_types):
                 raise TypeError()
             return \
                 TypedASTNode(
@@ -260,6 +277,7 @@ class Environment:
         elif expr.tag == 'field_access':
             x = self.check_expression(expr.x)
             if type(x.ty) != StructType:
+                print(x.ty)
                 raise TypeError()
             if not expr.field in x.ty.fields:
                 raise TypeError()
@@ -273,7 +291,10 @@ class Environment:
         elif expr.tag == 'cast':
             to_cast = self.check_expression(expr.expr)
             ty = self.check_type(expr.type)
-            if type(to_cast.ty) != Number:
+            castable = \
+                type(to_cast.ty) == Number or \
+                is_ptr(to_cast.ty)
+            if not castable:
                 raise TypeError()
             if type(ty) != Number:
                 raise TypeError()
@@ -304,6 +325,33 @@ class Environment:
                     a = a,
                     b = b,
                     ty = Boolean(),
+                )
+        elif expr.tag == '-':
+            a = self.check_expression(expr.a)
+            b = self.check_expression(expr.b)
+            compatible = a.ty == b.ty
+            if not compatible:
+                raise TypeError()
+            return \
+                TypedASTNode(
+                    '-',
+                    a = a,
+                    b = b,
+                    ty = a.ty,
+                )
+        elif expr.tag == 'number_literal':
+            return \
+                TypedASTNode(
+                    'number_literal',
+                    n = expr.n,
+                    ty = OpaqueNumber(),
+                )
+        elif expr.tag == 'string_literal':
+            return \
+                TypedASTNode(
+                    'string_literal',
+                    string = expr.string,
+                    ty = char_ptr,
                 )
         print(expr.tag)
         raise NotImplementedError()
@@ -356,6 +404,31 @@ class Environment:
             elif first_statement.tag == 'if_statement':
                 statement = self.check_if(first_statement)
                 new_env = self
+            elif first_statement.tag == 'expr_statement':
+                statement = \
+                    TypedASTNode(
+                        'expr_statement',
+                        expr = self.check_expression(first_statement.expr),
+                    )
+                new_env = self
+            elif first_statement.tag == 'break':
+                statement = TypedASTNode('break')
+                new_env = self
+            elif first_statement.tag == 'assignment':
+                expr = self.check_expression(first_statement.expr)
+                compatible = \
+                    expr.ty.substitutable_for(
+                        self.lookup_term(first_statement.name)
+                    )
+                if not compatible:
+                    raise TypeError()
+                statement = \
+                    TypedASTNode(
+                        'assignment',
+                        name = first_statement.name,
+                        expr = expr,
+                    )
+                new_env = self
             else:
                 print(first_statement.tag)
                 raise NotImplementedError()
@@ -363,9 +436,31 @@ class Environment:
 
     def check_function(self, decl):
         args = [(name, self.check_type(ty)) for name, ty in decl.args]
-        consume_type = self.check_type(decl.consume_type)
-        product_type = self.check_type(decl.product_type)
+        consume_type = None
+        product_type = None
+        if decl.consume_type:
+            consume_type = self.check_type(decl.consume_type)
+        if decl.product_type:
+            product_type = self.check_type(decl.product_type)
         return_type = self.check_type(decl.return_type)
+
+        if consume_type or product_type:
+            self.term_bindings[decl.name] = \
+                FunctionType(
+                    [ty for _, ty in args],
+                    TypeApplication(Coroutine(), [
+                        consume_type or Void(),
+                        product_type or Void(),
+                        return_type,
+                    ]),
+                )
+        else:
+            self.term_bindings[decl.name] = \
+                FunctionType(
+                    [ty for _, ty in args],
+                    return_type,
+                )
+
         new_env = Environment({}, dict(args), self, product_type, consume_type)
         body = new_env.check_body(decl.body)
         return \
@@ -394,8 +489,8 @@ class Environment:
 
 global_type_environment = {
     'void': Void(),
-    'ptr': Ptr(),
-    'i8': Number(True, 8),
+    'ptr': ptr,
+    'i8': char,
     'i32': Number(True, 32),
     'u32': Number(False, 32),
     'u64': Number(False, 64),
