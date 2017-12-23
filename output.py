@@ -71,7 +71,7 @@ class LLVMWriter:
     def writeout_arg(self, arg):
         (name, ty) = arg
         self.writeout_type(ty)
-        self.write(' %')
+        self.write(' ')
         self.write(name)
 
     def writeout_define(self, decl):
@@ -82,9 +82,38 @@ class LLVMWriter:
         self.write('(')
         self.writeout_csl(decl.args, self.writeout_arg)
         self.write(') {\n')
-        self.write('  ret void\n')
+        for basic_block in decl.basic_blocks:
+            self.writeout_basic_block(basic_block)
         self.write('}\n')
 
+    def writeout_basic_block(self, basic_block):
+        self.write(basic_block.label)
+        self.write(':\n')
+        for instruction in basic_block.instructions:
+           self.writeout_instruction(instruction)
+
+    def writeout_instruction(self, instruction):
+        self.write("  ")
+        if instruction.tag == 'bitcast':
+            self.write(instruction.ret_name)
+            self.write(" = bitcast ")
+            self.writeout_type(instruction.source_type)
+            self.write(" ")
+            self.write(instruction.value)
+            self.write(" to ")
+            self.writeout_type(instruction.dest_type)
+        elif instruction.tag == 'store':
+            self.write("store ")
+            self.writeout_type(instruction.source_type)
+            self.write(" ")
+            self.write(instruction.value)
+            self.write(", ")
+            self.writeout_type(instruction.dest_type)
+            self.write(" ")
+            self.write(instruction.dest)
+        else:
+            raise NotImplementedError()
+        self.write("\n")
     def writeout_decl(self, decl):
         if decl.tag == 'declare':
             self.writeout_declare(decl)

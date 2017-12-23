@@ -52,7 +52,7 @@ def continuation(ty):
 class FunctionWriter:
     def __init__(self, code_generator):
         self.code_generator = code_generator
-        self.var = map(lambda i: "var.%i" % i, itertools.count())
+        self.var = map(lambda i: "%%var.%i" % i, itertools.count())
         self.block = map(lambda i: "block.%i" % i, itertools.count())
 
     def generate_expression(self, expr):
@@ -75,6 +75,8 @@ class FunctionWriter:
                     b = b,
                 )
             return a_instructions + b_instructions + [instruction], output
+        elif expr.tag == "variable":
+            pass
         print(expr.tag)
         raise NotImplementedError()
 
@@ -107,22 +109,44 @@ class FunctionWriter:
             raise NotImplementedError()
 
     def generate_function(self, decl):
+        stack_ptr_val = '%$stack_ptr'
         return_type = \
             self.code_generator.generate_llvm_type(decl.return_type)
-        args = \
-            [(name, self.code_generator.generate_llvm_type(ty))
+        actual_args = \
+            [('%' + name, self.code_generator.generate_llvm_type(ty))
                 for name, ty in decl.args]
         args = [
-            ('$stack_ptr', stack_ptr),
-            ('$continuation', continuation(return_type))
-        ] + args
-        blocks = [
-            CGASTNode('basic_block', name = next(self.block), instructions=[])
+            (stack_ptr_val, stack_ptr),
+            ('%$continuation', continuation(return_type))
+        ] + actual_args
+
+        arg_name, arg_ty = actual_args[0]
+        intermediate = next(self.var)
+        instructions = [
+            CGASTNode(
+                "bitcast",
+                dest_type = ptr_to(arg_ty),
+                source_type = stack_ptr,
+                value = stack_ptr_val,
+                ret_name = intermediate,
+            ),
+            CGASTNode(
+                "store",
+                dest_type = ptr_to(arg_ty),
+                source_type = arg_ty,
+                value = arg_name,
+                dest = intermediate,
+            )
         ]
-        for statement in decl.body:
-            instructions, new_blocks = self.generate_statement(statement)
-            blocks[-1].instructions.extend(instructions)
-            blocks.extend(new_blocks)
+
+        blocks = [
+            CGASTNode('basic_block', label = next(self.block), instructions=instructions)
+        ]
+
+        # for statement in decl.body:
+        #     instructions, new_blocks = self.generate_statement(statement)
+        #     blocks[-1].instructions.extend(instructions)
+        #     blocks.extend(new_blocks)
 
         return [
             CGASTNode(
@@ -130,7 +154,7 @@ class FunctionWriter:
                 name = decl.name,
                 return_type = void,
                 args = args,
-                blocks = blocks,
+                basic_blocks = blocks,
             )
         ]
 
@@ -144,7 +168,6 @@ class CodeGenerator:
             return \
                 CGASTNode(
                     'number',
-                    signed = ty.signed,
                     width = ty.width,
                 )
         elif type_checker.is_ptr(ty):
