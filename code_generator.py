@@ -86,7 +86,7 @@ class FunctionWriter:
     def generate_statement(self, statement):
         if statement.tag == 'let_statement':
             instructions, name = self.generate_expression(statement.expr)
-            return instructions, []
+            return instructions, None, []
         elif statement.tag == 'loop_statement':
             raise NotImplementedError()
         elif statement.tag == 'break':
@@ -97,30 +97,30 @@ class FunctionWriter:
             raise NotImplementedError()
         elif statement.tag == 'return':
             instructions, value = self.generate_expression(statement.expr)
-            instructions.append(
+            terminator = \
                 CGASTNode(
                     'tail_call',
                     function = '%$continuation',
+                    ret_type = void,
                     args = [
-                        "%$stack",
-                        value,
+                        ("%$stack_ptr", stack_ptr),
+                        (value, self.return_type),
                     ]
                 )
-            )
-            return instructions, []
+            return instructions, terminator, []
         else:
             raise NotImplementedError()
 
     def generate_function(self, decl):
         stack_ptr_val = '%$stack_ptr'
-        return_type = \
+        self.return_type = \
             self.code_generator.generate_llvm_type(decl.return_type)
         actual_args = \
             [('%' + name, self.code_generator.generate_llvm_type(ty))
                 for name, ty in decl.args]
         args = [
             (stack_ptr_val, stack_ptr),
-            ('%$continuation', continuation(return_type))
+            ('%$continuation', continuation(self.return_type))
         ] + actual_args
 
         for arg_name, _ in decl.args:
@@ -161,7 +161,9 @@ class FunctionWriter:
         ]
 
         for statement in decl.body:
-            instructions, new_blocks = self.generate_statement(statement)
+            instructions, terminator, new_blocks = \
+                self.generate_statement(statement)
+            blocks[-1].terminator = terminator or blocks[-1].terminator
             blocks[-1].instructions.extend(instructions)
             blocks.extend(new_blocks)
 

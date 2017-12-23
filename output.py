@@ -74,13 +74,16 @@ class LLVMWriter:
         self.write(' ')
         self.write(name)
 
+    def writeout_arg_list(self, args):
+        self.writeout_csl(args, self.writeout_arg)
+
     def writeout_define(self, decl):
         self.write('define ')
         self.writeout_type(decl.return_type)
         self.write(' @')
         self.write(decl.name)
         self.write('(')
-        self.writeout_csl(decl.args, self.writeout_arg)
+        self.writeout_arg_list(decl.args)
         self.write(') {\n')
         for basic_block in decl.basic_blocks:
             self.writeout_basic_block(basic_block)
@@ -94,8 +97,29 @@ class LLVMWriter:
         self.writeout_terminator(basic_block.terminator)
 
     def writeout_terminator(self, terminator):
-        self.write("  call void @llvm.trap()\n")
-        self.write("  unreachable\n")
+        if not terminator:
+            self.write("  call void @llvm.trap()\n")
+            self.write("  unreachable\n")
+            return
+        if terminator.tag == 'tail_call':
+            if terminator.ret_type.tag == 'void':
+                self.write("  tail call ")
+                self.writeout_type(terminator.ret_type)
+                self.write(" ")
+                self.write(terminator.function)
+                self.write("(")
+                self.writeout_arg_list(terminator.args)
+                self.write(")\n  ret void\n")
+            else:
+                self.write("  %$tail_output = tail call ")
+                self.writeout_type(terminator.ret_type)
+                self.write(" ")
+                self.write(terminator.function)
+                self.write("(")
+                self.writeout_arg_list(terminator.args)
+                self.write(")\n  ret %$tail_output\n")
+        else:
+            raise NotImplementedError()
 
     def writeout_instruction(self, instruction):
         self.write("  ")
@@ -135,6 +159,7 @@ class LLVMWriter:
             self.write(", ")
             self.write(instruction.b)
         else:
+            print(instruction.tag)
             raise NotImplementedError()
         self.write("\n")
     def writeout_decl(self, decl):
