@@ -126,6 +126,14 @@ class LLVMWriter:
             self.write(instruction.value)
             self.write(", i64 ")
             self.write(instruction.offset)
+        elif instruction.tag == 'add':
+            self.write(instruction.ret_name)
+            self.write(" = add ")
+            self.writeout_type(instruction.ty)
+            self.write(" ")
+            self.write(instruction.a)
+            self.write(", ")
+            self.write(instruction.b)
         else:
             raise NotImplementedError()
         self.write("\n")

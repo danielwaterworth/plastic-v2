@@ -79,7 +79,7 @@ class FunctionWriter:
                 )
             return a_instructions + b_instructions + [instruction], output
         elif expr.tag == "variable":
-            pass
+            return [], self.variables[expr.name]
         print(expr.tag)
         raise NotImplementedError()
 
@@ -160,10 +160,10 @@ class FunctionWriter:
             CGASTNode('basic_block', label = next(self.block), instructions=instructions, terminator = None)
         ]
 
-        # for statement in decl.body:
-        #     instructions, new_blocks = self.generate_statement(statement)
-        #     blocks[-1].instructions.extend(instructions)
-        #     blocks.extend(new_blocks)
+        for statement in decl.body:
+            instructions, new_blocks = self.generate_statement(statement)
+            blocks[-1].instructions.extend(instructions)
+            blocks.extend(new_blocks)
 
         return [
             CGASTNode(
