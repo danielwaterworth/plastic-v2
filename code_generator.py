@@ -55,6 +55,7 @@ class FunctionWriter:
         self.var = map(lambda i: "%%var.%i" % i, itertools.count())
         self.stack_ptr = map(lambda i: "%%stackptr.%i" % i, itertools.count())
         self.block = map(lambda i: "block.%i" % i, itertools.count())
+        self.variables = {}
 
     def generate_expression(self, expr):
         if expr.tag == 'yield_expression':
@@ -120,6 +121,9 @@ class FunctionWriter:
             (stack_ptr_val, stack_ptr),
             ('%$continuation', continuation(return_type))
         ] + actual_args
+
+        for arg_name, _ in decl.args:
+            self.variables[arg_name] = "%" + arg_name
 
         instructions = []
         for arg_name, arg_ty in actual_args:
