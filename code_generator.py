@@ -53,6 +53,7 @@ class FunctionWriter:
     def __init__(self, code_generator):
         self.code_generator = code_generator
         self.var = map(lambda i: "%%var.%i" % i, itertools.count())
+        self.stack_ptr = map(lambda i: "%%stackptr.%i" % i, itertools.count())
         self.block = map(lambda i: "block.%i" % i, itertools.count())
 
     def generate_expression(self, expr):
@@ -120,27 +121,38 @@ class FunctionWriter:
             ('%$continuation', continuation(return_type))
         ] + actual_args
 
-        arg_name, arg_ty = actual_args[0]
-        intermediate = next(self.var)
-        instructions = [
-            CGASTNode(
-                "bitcast",
-                dest_type = ptr_to(arg_ty),
-                source_type = stack_ptr,
-                value = stack_ptr_val,
-                ret_name = intermediate,
-            ),
-            CGASTNode(
-                "store",
-                dest_type = ptr_to(arg_ty),
-                source_type = arg_ty,
-                value = arg_name,
-                dest = intermediate,
-            )
-        ]
+        instructions = []
+        for arg_name, arg_ty in actual_args:
+            intermediate = next(self.var)
+            new_stack_ptr = next(self.stack_ptr)
+            instructions.extend([
+                CGASTNode(
+                    "bitcast",
+                    dest_type = ptr_to(arg_ty),
+                    source_type = stack_ptr,
+                    value = stack_ptr_val,
+                    ret_name = intermediate,
+                ),
+                CGASTNode(
+                    "store",
+                    dest_type = ptr_to(arg_ty),
+                    source_type = arg_ty,
+                    value = arg_name,
+                    dest = intermediate,
+                ),
+                CGASTNode(
+                    "getelementptr",
+                    source_type = ptr_to(arg_ty),
+                    value = intermediate,
+                    offset = "1",
+                    ret_name = new_stack_ptr,
+                ),
+            ])
+
+            stack_ptr_val = new_stack_ptr
 
         blocks = [
-            CGASTNode('basic_block', label = next(self.block), instructions=instructions)
+            CGASTNode('basic_block', label = next(self.block), instructions=instructions, terminator = None)
         ]
 
         # for statement in decl.body:

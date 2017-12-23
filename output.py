@@ -91,6 +91,11 @@ class LLVMWriter:
         self.write(':\n')
         for instruction in basic_block.instructions:
            self.writeout_instruction(instruction)
+        self.writeout_terminator(basic_block.terminator)
+
+    def writeout_terminator(self, terminator):
+        self.write("  call void @llvm.trap()\n")
+        self.write("  unreachable\n")
 
     def writeout_instruction(self, instruction):
         self.write("  ")
@@ -111,6 +116,14 @@ class LLVMWriter:
             self.writeout_type(instruction.dest_type)
             self.write(" ")
             self.write(instruction.dest)
+        elif instruction.tag == 'getelementptr':
+            self.write(instruction.ret_name)
+            self.write(" = getelementptr ")
+            self.writeout_type(instruction.source_type)
+            self.write(" ")
+            self.write(instruction.value)
+            self.write(", i64 ")
+            self.write(instruction.offset)
         else:
             raise NotImplementedError()
         self.write("\n")
