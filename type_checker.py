@@ -1,5 +1,3 @@
-import parser
-
 class Kind:
     pass
 
