@@ -72,6 +72,7 @@ class FunctionWriter:
             instruction = \
                 CGASTNode(
                     'add',
+                    ret_name = output,
                     ty = self.code_generator.generate_llvm_type(expr.ty),
                     a = a,
                     b = b,
