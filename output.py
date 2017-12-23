@@ -139,6 +139,9 @@ class LLVMWriter:
         else:
             raise NotImplementedError()
 
+    def writeout_prelude(self):
+        self.write("declare void @llvm.trap()\n\n")
+
     def writeout_decls(self, decls):
         for decl in decls:
             self.writeout_decl(decl)
@@ -158,4 +161,6 @@ llvm_decls = \
     generate_top_level_decls(type_checked_decls)
 
 with open(sys.argv[2], 'w') as fd:
-    LLVMWriter(fd).writeout_decls(llvm_decls)
+    writer = LLVMWriter(fd)
+    writer.writeout_prelude()
+    writer.writeout_decls(llvm_decls)
