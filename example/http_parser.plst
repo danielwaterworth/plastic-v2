@@ -31,6 +31,12 @@ enum
     part(partial_http_result_t),
 
 define
+  bar
+  = {
+    return void;
+  }
+
+define
   foo
     <-
       a: i8,
@@ -38,6 +44,7 @@ define
     ->
       i8
     = {
+      bar();
       return a + b;
     }
 

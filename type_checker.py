@@ -600,6 +600,7 @@ global_type_environment = {
 
 global_term_environment = {
     'null': OpaquePtr(),
+    'void': void,
     'resume':
         LambdaType(
             ['a', 'b', 'c'],

@@ -140,6 +140,7 @@ class LLVMWriter:
             self.writeout_type(instruction.dest_type)
             self.write(" ")
             self.write(instruction.dest)
+            self.write(', align 1')
         elif instruction.tag == 'getelementptr':
             self.write(instruction.ret_name)
             self.write(" = getelementptr ")
@@ -158,6 +159,15 @@ class LLVMWriter:
             self.write(instruction.a)
             self.write(", ")
             self.write(instruction.b)
+        elif instruction.tag == 'load':
+            self.write(instruction.ret_name)
+            self.write(" = load ")
+            self.writeout_type(instruction.dest_type)
+            self.write(", ")
+            self.writeout_type(instruction.source_type)
+            self.write(" ")
+            self.write(instruction.value)
+            self.write(', align 1')
         else:
             print(instruction.tag)
             raise NotImplementedError()

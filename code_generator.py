@@ -56,131 +56,247 @@ class FunctionWriter:
         self.stack_ptr = map(lambda i: "%%stackptr.%i" % i, itertools.count())
         self.block = map(lambda i: "block.%i" % i, itertools.count())
         self.variables = {}
+        self.instructions = []
+        self.basic_blocks = []
+        self.functions = []
+        self.stack = []
+
+    def terminate_basic_block(self):
+        self.basic_blocks.append(
+            CGASTNode(
+                'basic_block',
+                label = next(self.block),
+                instructions = [],
+                terminator = None,
+            ),
+        )
+        self.instructions = self.basic_blocks[-1].instructions
+
+    def terminate_function(self, ty):
+        self.stack_ptr_val = "%$stackptr"
+        self.instructions = []
+        current_stack_ptr = self.stack_ptr_val
+        for arg_name, arg_ty in reversed(self.stack):
+            intermediate = next(self.var)
+            new_stack_ptr = next(self.stack_ptr)
+            self.instructions.extend([
+                CGASTNode(
+                    "bitcast",
+                    dest_type = ptr_to(arg_ty),
+                    source_type = stack_ptr,
+                    value = current_stack_ptr,
+                    ret_name = intermediate,
+                ),
+                CGASTNode(
+                    "getelementptr",
+                    source_type = ptr_to(arg_ty),
+                    value = intermediate,
+                    offset = "-1",
+                    ret_name = new_stack_ptr,
+                ),
+                CGASTNode(
+                    "load",
+                    source_type = ptr_to(arg_ty),
+                    dest_type = arg_ty,
+                    value = new_stack_ptr,
+                    ret_name = arg_name,
+                ),
+            ])
+            current_stack_ptr = new_stack_ptr
+
+        self.basic_blocks = [
+            CGASTNode(
+                'basic_block',
+                label = next(self.block),
+                instructions = self.instructions,
+                terminator = None
+            ),
+        ]
+
+        args = [
+            ("%$stackptr", stack_ptr),
+        ]
+        if ty.tag != 'void':
+            args.append(("%$param", ty))
+
+        self.functions.append(
+            CGASTNode(
+                'define',
+                name = next(self.function_names),
+                args = args,
+                return_type = void,
+                basic_blocks = self.basic_blocks,
+            )
+        )
 
     def generate_expression(self, expr):
         if expr.tag == 'yield_expression':
             self.generate_expression(expr.expr)
             raise NotImplementedError()
-            return [], next(self.var)
         elif expr.tag == 'application':
-            raise NotImplementedError()
-            return [], next(self.var)
+            return_type = \
+                self.code_generator.generate_llvm_type(
+                    expr.ty,
+                )
+            function = self.generate_expression(expr.function)
+            args = [self.generate_expression(arg) for arg in expr.args]
+            basic_block = self.basic_blocks[-1]
+            stack_ptr_val = self.stack_ptr_val
+            self.terminate_function(return_type)
+            llvm_function = self.functions[-1]
+            args = [
+                (stack_ptr_val, stack_ptr),
+                ('@' + llvm_function.name, continuation(return_type)),
+            ] + args
+            basic_block.terminator = \
+                CGASTNode(
+                    'tail_call',
+                    ret_type = void,
+                    function = function,
+                    args = args,
+                )
+            return "%$param"
         elif expr.tag == '+':
-            a_instructions, a = self.generate_expression(expr.a)
-            b_instructions, b = self.generate_expression(expr.b)
+            a = self.generate_expression(expr.a)
+            b = self.generate_expression(expr.b)
             output = next(self.var)
-            instruction = \
+            self.instructions.append(
                 CGASTNode(
                     'add',
                     ret_name = output,
                     ty = self.code_generator.generate_llvm_type(expr.ty),
                     a = a,
                     b = b,
-                )
-            return a_instructions + b_instructions + [instruction], output
+                ),
+            )
+            return output
         elif expr.tag == "variable":
-            return [], self.variables[expr.name]
+            value = self.code_generator.lookup(expr.name)
+            value = self.variables.get(expr.name, value)
+            assert value is not None
+            return value
         print(expr.tag)
         raise NotImplementedError()
 
     def generate_statement(self, statement):
         if statement.tag == 'let_statement':
-            instructions, name = self.generate_expression(statement.expr)
-            return instructions, None, []
+            self.generate_expression(statement.expr)
         elif statement.tag == 'loop_statement':
             raise NotImplementedError()
         elif statement.tag == 'break':
             raise NotImplementedError()
         elif statement.tag == 'assignment':
             raise NotImplementedError()
-        elif statement.tag == 'expression_statement':
-            raise NotImplementedError()
+        elif statement.tag == 'expr_statement':
+            self.generate_expression(statement.expr)
         elif statement.tag == 'return':
-            instructions, value = self.generate_expression(statement.expr)
-            terminator = \
+            value = self.generate_expression(statement.expr)
+            args = [("%$stackptr", stack_ptr)]
+            if self.return_type.tag != 'void':
+                args.append((value, self.return_type))
+            self.basic_blocks[-1].terminator = \
                 CGASTNode(
                     'tail_call',
                     function = '%$continuation',
                     ret_type = void,
-                    args = [
-                        ("%$stack_ptr", stack_ptr),
-                        (value, self.return_type),
-                    ]
+                    args = args,
                 )
-            return instructions, terminator, []
+            self.instructions = None
         else:
+            print(statement.tag)
             raise NotImplementedError()
 
     def generate_function(self, decl):
-        stack_ptr_val = '%$stack_ptr'
+        self.function_names = \
+            map(lambda i: "%s.%i" % (decl.name, i), itertools.count())
+
+        self.stack_ptr_val = '%$stackptr'
         self.return_type = \
             self.code_generator.generate_llvm_type(decl.return_type)
         actual_args = \
             [('%' + name, self.code_generator.generate_llvm_type(ty))
                 for name, ty in decl.args]
-        args = [
-            (stack_ptr_val, stack_ptr),
-            ('%$continuation', continuation(self.return_type))
-        ] + actual_args
+        args_to_persist = \
+            [('%$continuation', continuation(self.return_type))] + actual_args
+        args = [(self.stack_ptr_val, stack_ptr)] + args_to_persist
 
         for arg_name, _ in decl.args:
             self.variables[arg_name] = "%" + arg_name
 
-        instructions = []
-        for arg_name, arg_ty in actual_args:
-            intermediate = next(self.var)
+        for arg_name, arg_ty in args_to_persist:
+            self.stack.append((arg_name, arg_ty))
+            temp0 = next(self.var)
+            temp1 = next(self.var)
             new_stack_ptr = next(self.stack_ptr)
-            instructions.extend([
+            arg_ptr = ptr_to(arg_ty)
+            self.instructions.extend([
                 CGASTNode(
                     "bitcast",
                     dest_type = ptr_to(arg_ty),
                     source_type = stack_ptr,
-                    value = stack_ptr_val,
-                    ret_name = intermediate,
+                    value = self.stack_ptr_val,
+                    ret_name = temp0,
                 ),
                 CGASTNode(
                     "store",
                     dest_type = ptr_to(arg_ty),
                     source_type = arg_ty,
                     value = arg_name,
-                    dest = intermediate,
+                    dest = temp0,
                 ),
                 CGASTNode(
                     "getelementptr",
-                    source_type = ptr_to(arg_ty),
-                    value = intermediate,
+                    source_type = arg_ptr,
+                    value = temp0,
                     offset = "1",
+                    ret_name = temp1,
+                ),
+                CGASTNode(
+                    "bitcast",
+                    dest_type = stack_ptr,
+                    source_type = arg_ptr,
+                    value = temp1,
                     ret_name = new_stack_ptr,
                 ),
             ])
 
-            stack_ptr_val = new_stack_ptr
+            self.stack_ptr_val = new_stack_ptr
 
-        blocks = [
-            CGASTNode('basic_block', label = next(self.block), instructions=instructions, terminator = None)
+        self.basic_blocks = [
+            CGASTNode(
+                'basic_block',
+                label = next(self.block),
+                instructions = self.instructions,
+                terminator = None
+            ),
         ]
 
-        for statement in decl.body:
-            instructions, terminator, new_blocks = \
-                self.generate_statement(statement)
-            blocks[-1].terminator = terminator or blocks[-1].terminator
-            blocks[-1].instructions.extend(instructions)
-            blocks.extend(new_blocks)
-
-        return [
+        self.functions = [
             CGASTNode(
                 'define',
                 name = decl.name,
                 return_type = void,
                 args = args,
-                basic_blocks = blocks,
+                basic_blocks = self.basic_blocks,
             )
         ]
+
+        for statement in decl.body:
+            self.generate_statement(statement)
+
+        return self.functions
 
 class CodeGenerator:
     def __init__(self):
         self.structs = {}
         self.enums = {}
+        self.functions = set()
+
+    def lookup(self, name):
+        if name == 'void':
+            return 'void'
+        if name in self.functions:
+            return '@' + name
 
     def generate_llvm_type(self, ty):
         if type(ty) == type_checker.Number:
@@ -205,6 +321,7 @@ class CodeGenerator:
                 )
         elif type(ty) == type_checker.Void:
             return void
+        print(ty)
         raise NotImplementedError()
 
     def generate_llvm_types(self, types):
@@ -292,6 +409,7 @@ class CodeGenerator:
         ] + constructor_structs
 
     def generate_function(self, decl):
+        self.functions.add(decl.name)
         return FunctionWriter(self).generate_function(decl)
 
     def generate_top_level_decl(self, decl):
