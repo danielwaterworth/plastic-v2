@@ -119,6 +119,8 @@ class LLVMWriter:
         elif instruction.tag == 'getelementptr':
             self.write(instruction.ret_name)
             self.write(" = getelementptr ")
+            self.writeout_type(instruction.source_type.ty)
+            self.write(", ")
             self.writeout_type(instruction.source_type)
             self.write(" ")
             self.write(instruction.value)
