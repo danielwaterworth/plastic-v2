@@ -45,7 +45,11 @@ define
       i8
     = {
       bar();
-      return a + b;
+      if true {
+        return a;
+      } else {
+        return a + b;
+      }
     }
 
 # define
