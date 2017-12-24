@@ -46,7 +46,7 @@ define
     = {
       let x = true;
       bar();
-      if x {
+      if true {
         return a + b;
       } else {
         return a;

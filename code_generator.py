@@ -61,6 +61,20 @@ class FunctionWriter:
         self.functions = []
         self.stack = []
 
+    def copy_context(self):
+        writer = \
+            FunctionWriter(
+                self.code_generator
+            )
+        writer.variables = dict(self.variables)
+        writer.instructions = list(self.instructions)
+        writer.basic_blocks = list(self.basic_blocks)
+        writer.functions = list(self.functions)
+        writer.stack = list(self.stack)
+        writer.function_names = self.function_names
+        writer.return_type = self.return_type
+        return writer
+
     def terminate_basic_block(self):
         self.basic_blocks.append(
             CGASTNode(
@@ -214,6 +228,19 @@ class FunctionWriter:
                     args = args,
                 )
             self.instructions = None
+        elif statement.tag == 'if_statement':
+            condition = self.generate_expression(statement.condition)
+            true_writer = self.copy_context()
+            false_writer = self.copy_context()
+
+            true_writer.terminate_function(void)
+            false_writer.terminate_function(void)
+
+            for s in statement.true_side:
+                true_writer.generate_statement(s)
+            for s in statement.false_side:
+                false_writer.generate_statement(s)
+            raise NotImplementedError()
         else:
             print(statement.tag)
             raise NotImplementedError()
