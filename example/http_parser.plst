@@ -44,12 +44,9 @@ define
     ->
       i8
     = {
+      let x = true;
       bar();
-      if true {
-        return a;
-      } else {
-        return a + b;
-      }
+      return a + b;
     }
 
 # define

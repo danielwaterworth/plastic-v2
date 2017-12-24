@@ -77,29 +77,38 @@ class FunctionWriter:
         self.instructions = []
         current_stack_ptr = self.stack_ptr_val
         for arg_name, arg_ty in reversed(self.stack):
-            intermediate = next(self.var)
+            arg_ptr = ptr_to(arg_ty)
+            temp0 = next(self.var)
+            temp1 = next(self.var)
             new_stack_ptr = next(self.stack_ptr)
             self.instructions.extend([
                 CGASTNode(
                     "bitcast",
-                    dest_type = ptr_to(arg_ty),
+                    dest_type = arg_ptr,
                     source_type = stack_ptr,
                     value = current_stack_ptr,
-                    ret_name = intermediate,
+                    ret_name = temp0,
                 ),
                 CGASTNode(
                     "getelementptr",
-                    source_type = ptr_to(arg_ty),
-                    value = intermediate,
+                    source_type = arg_ptr,
+                    value = temp0,
                     offset = "-1",
-                    ret_name = new_stack_ptr,
+                    ret_name = temp1,
                 ),
                 CGASTNode(
                     "load",
-                    source_type = ptr_to(arg_ty),
+                    source_type = arg_ptr,
                     dest_type = arg_ty,
-                    value = new_stack_ptr,
+                    value = temp1,
                     ret_name = arg_name,
+                ),
+                CGASTNode(
+                    "bitcast",
+                    dest_type = stack_ptr,
+                    source_type = arg_ptr,
+                    value = temp1,
+                    ret_name = new_stack_ptr,
                 ),
             ])
             current_stack_ptr = new_stack_ptr
@@ -180,7 +189,10 @@ class FunctionWriter:
 
     def generate_statement(self, statement):
         if statement.tag == 'let_statement':
-            self.generate_expression(statement.expr)
+            value = self.generate_expression(statement.expr)
+            name = '%' + statement.name
+            ty = self.code_generator.generate_llvm_type(statement.expr.ty)
+            self.new_stack_variable(name, ty, value)
         elif statement.tag == 'loop_statement':
             raise NotImplementedError()
         elif statement.tag == 'break':
@@ -206,6 +218,45 @@ class FunctionWriter:
             print(statement.tag)
             raise NotImplementedError()
 
+    def new_stack_variable(self, name, ty, value):
+        self.stack.append((name, ty))
+        temp0 = next(self.var)
+        temp1 = next(self.var)
+        new_stack_ptr = next(self.stack_ptr)
+        arg_ptr = ptr_to(ty)
+        self.instructions.extend([
+            CGASTNode(
+                "bitcast",
+                dest_type = arg_ptr,
+                source_type = stack_ptr,
+                value = self.stack_ptr_val,
+                ret_name = temp0,
+            ),
+            CGASTNode(
+                "store",
+                dest_type = arg_ptr,
+                source_type = ty,
+                value = value,
+                dest = temp0,
+            ),
+            CGASTNode(
+                "getelementptr",
+                source_type = arg_ptr,
+                value = temp0,
+                offset = "1",
+                ret_name = temp1,
+            ),
+            CGASTNode(
+                "bitcast",
+                dest_type = stack_ptr,
+                source_type = arg_ptr,
+                value = temp1,
+                ret_name = new_stack_ptr,
+            ),
+        ])
+
+        self.stack_ptr_val = new_stack_ptr
+
     def generate_function(self, decl):
         self.function_names = \
             map(lambda i: "%s.%i" % (decl.name, i), itertools.count())
@@ -224,43 +275,7 @@ class FunctionWriter:
             self.variables[arg_name] = "%" + arg_name
 
         for arg_name, arg_ty in args_to_persist:
-            self.stack.append((arg_name, arg_ty))
-            temp0 = next(self.var)
-            temp1 = next(self.var)
-            new_stack_ptr = next(self.stack_ptr)
-            arg_ptr = ptr_to(arg_ty)
-            self.instructions.extend([
-                CGASTNode(
-                    "bitcast",
-                    dest_type = ptr_to(arg_ty),
-                    source_type = stack_ptr,
-                    value = self.stack_ptr_val,
-                    ret_name = temp0,
-                ),
-                CGASTNode(
-                    "store",
-                    dest_type = ptr_to(arg_ty),
-                    source_type = arg_ty,
-                    value = arg_name,
-                    dest = temp0,
-                ),
-                CGASTNode(
-                    "getelementptr",
-                    source_type = arg_ptr,
-                    value = temp0,
-                    offset = "1",
-                    ret_name = temp1,
-                ),
-                CGASTNode(
-                    "bitcast",
-                    dest_type = stack_ptr,
-                    source_type = arg_ptr,
-                    value = temp1,
-                    ret_name = new_stack_ptr,
-                ),
-            ])
-
-            self.stack_ptr_val = new_stack_ptr
+            self.new_stack_variable(arg_name, arg_ty, arg_name)
 
         self.basic_blocks = [
             CGASTNode(
@@ -295,7 +310,11 @@ class CodeGenerator:
     def lookup(self, name):
         if name == 'void':
             return 'void'
-        if name in self.functions:
+        elif name == 'true':
+            return '1'
+        elif name == 'false':
+            return '0'
+        elif name in self.functions:
             return '@' + name
 
     def generate_llvm_type(self, ty):
@@ -321,6 +340,12 @@ class CodeGenerator:
                 )
         elif type(ty) == type_checker.Void:
             return void
+        elif type(ty) == type_checker.Boolean:
+            return \
+                CGASTNode(
+                    'number',
+                    width = 1,
+                )
         print(ty)
         raise NotImplementedError()
 

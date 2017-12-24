@@ -601,6 +601,8 @@ global_type_environment = {
 global_term_environment = {
     'null': OpaquePtr(),
     'void': void,
+    'true': Boolean(),
+    'false': Boolean(),
     'resume':
         LambdaType(
             ['a', 'b', 'c'],
