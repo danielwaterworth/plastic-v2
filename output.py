@@ -79,6 +79,8 @@ class LLVMWriter:
 
     def writeout_define(self, decl):
         self.write('define ')
+        self.write(' '.join(decl.linkage))
+        self.write(' ')
         self.writeout_type(decl.return_type)
         self.write(' @')
         self.write(decl.name)

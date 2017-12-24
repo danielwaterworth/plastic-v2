@@ -86,7 +86,7 @@ class FunctionWriter:
     def terminate_function(self, ty):
         self.stack_ptr_val = "%$stackptr"
         self.instructions = []
-        current_stack_ptr = self.stack_ptr_val
+        self.stack_frame_ptr_val = self.stack_ptr_val
         for arg_name, arg_ty in reversed(self.stack):
             arg_ptr = ptr_to(arg_ty)
             temp0 = next(self.var)
@@ -97,7 +97,7 @@ class FunctionWriter:
                     "bitcast",
                     dest_type = arg_ptr,
                     source_type = stack_ptr,
-                    value = current_stack_ptr,
+                    value = self.stack_frame_ptr_val,
                     ret_name = temp0,
                 ),
                 CGASTNode(
@@ -122,7 +122,7 @@ class FunctionWriter:
                     ret_name = new_stack_ptr,
                 ),
             ])
-            current_stack_ptr = new_stack_ptr
+            self.stack_frame_ptr_val = new_stack_ptr
 
         self.basic_blocks = [
             CGASTNode(
@@ -142,6 +142,7 @@ class FunctionWriter:
         self.functions.append(
             CGASTNode(
                 'define',
+                linkage = ['private'],
                 name = next(self.function_names),
                 args = args,
                 return_type = void,
@@ -214,7 +215,7 @@ class FunctionWriter:
             self.generate_expression(statement.expr)
         elif statement.tag == 'return':
             value = self.generate_expression(statement.expr)
-            args = [("%$stackptr", stack_ptr)]
+            args = [(self.stack_frame_ptr_val, stack_ptr)]
             if self.return_type.tag != 'void':
                 args.append((value, self.return_type))
             self.basic_blocks[-1].terminator = \
@@ -309,6 +310,7 @@ class FunctionWriter:
             map(lambda i: "%s.%i" % (decl.name, i), itertools.count())
 
         self.stack_ptr_val = '%$stackptr'
+        self.stack_frame_ptr_val = '%$stackptr'
         self.return_type = \
             self.code_generator.generate_llvm_type(decl.return_type)
         actual_args = \
@@ -336,6 +338,7 @@ class FunctionWriter:
         self.functions = [
             CGASTNode(
                 'define',
+                linkage = [],
                 name = decl.name,
                 return_type = void,
                 args = args,
