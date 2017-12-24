@@ -205,6 +205,7 @@ class FunctionWriter:
             name = '%' + statement.name
             ty = self.code_generator.generate_llvm_type(statement.expr.ty)
             self.new_stack_variable(name, ty, value)
+            self.variables[statement.name] = name
         elif statement.tag == 'loop_statement':
             raise NotImplementedError()
         elif statement.tag == 'break':
@@ -262,6 +263,22 @@ class FunctionWriter:
                     ret_type = void,
                     args = [(self.stack_ptr_val, stack_ptr)],
                 )
+
+            self.terminate_function(void)
+            last_function = self.functions[-1]
+            tail_call = \
+                CGASTNode(
+                    'tail_call',
+                    function = '@' + last_function.name,
+                    ret_type = void,
+                    args = [(self.stack_ptr_val, stack_ptr)],
+                )
+            if true_writer.functions[-1].basic_blocks[-1].terminator is None:
+                true_writer.functions[-1].basic_blocks[-1].terminator = \
+                    tail_call
+            if false_writer.functions[-1].basic_blocks[-1].terminator is None:
+                false_writer.functions[-1].basic_blocks[-1].terminator = \
+                    tail_call
         else:
             print(statement.tag)
             raise NotImplementedError()
