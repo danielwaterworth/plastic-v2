@@ -168,6 +168,18 @@ class LLVMWriter:
             self.write(" ")
             self.write(instruction.value)
             self.write(', align 1')
+        elif instruction.tag == 'select':
+            self.write(instruction.ret_name)
+            self.write(" = select i1 ")
+            self.write(instruction.condition)
+            self.write(", ")
+            self.writeout_type(instruction.type)
+            self.write(" ")
+            self.write(instruction.true_value)
+            self.write(", ")
+            self.writeout_type(instruction.type)
+            self.write(" ")
+            self.write(instruction.false_value)
         else:
             print(instruction.tag)
             raise NotImplementedError()

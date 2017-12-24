@@ -67,9 +67,6 @@ class FunctionWriter:
                 self.code_generator
             )
         writer.variables = dict(self.variables)
-        writer.instructions = list(self.instructions)
-        writer.basic_blocks = list(self.basic_blocks)
-        writer.functions = list(self.functions)
         writer.stack = list(self.stack)
         writer.function_names = self.function_names
         writer.return_type = self.return_type
@@ -236,11 +233,34 @@ class FunctionWriter:
             true_writer.terminate_function(void)
             false_writer.terminate_function(void)
 
+            true_function = true_writer.functions[0]
+
             for s in statement.true_side:
                 true_writer.generate_statement(s)
             for s in statement.false_side:
                 false_writer.generate_statement(s)
-            raise NotImplementedError()
+
+            function_ptr = next(self.var)
+
+            self.functions.extend(true_writer.functions)
+            self.functions.extend(false_writer.functions)
+            self.instructions.append(
+                CGASTNode(
+                    'select',
+                    condition = condition,
+                    true_value = '@' + true_writer.functions[0].name,
+                    false_value = '@' + false_writer.functions[0].name,
+                    type = continuation(void),
+                    ret_name = function_ptr
+                )
+            )
+            self.basic_blocks[-1].terminator = \
+                CGASTNode(
+                    'tail_call',
+                    function = function_ptr,
+                    ret_type = void,
+                    args = [(self.stack_ptr_val, stack_ptr)],
+                )
         else:
             print(statement.tag)
             raise NotImplementedError()
