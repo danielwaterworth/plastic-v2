@@ -207,7 +207,10 @@ class FunctionWriter:
             self.new_stack_variable(name, ty, value)
             self.variables[statement.name] = name
         elif statement.tag == 'loop_statement':
-            raise NotImplementedError()
+            self.terminate_function(void)
+            for s in statement.body:
+                self.generate_statement(s)
+            self.terminate_function(void)
         elif statement.tag == 'break':
             raise NotImplementedError()
         elif statement.tag == 'assignment':
