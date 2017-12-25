@@ -230,7 +230,19 @@ class FunctionWriter:
         elif statement.tag == 'break':
             raise NotImplementedError()
         elif statement.tag == 'assignment':
-            raise NotImplementedError()
+            l_expr = self.generate_l_expr(statement.l_expr)
+            expr = self.generate_expression(statement.expr)
+            source_type = self.code_generator.generate_llvm_type(statement.expr.ty)
+            #TODO handle sub typing
+            self.instructions.append(
+                CGASTNode(
+                    "store",
+                    dest_type = ptr_to(source_type),
+                    source_type = source_type,
+                    value = expr,
+                    dest = l_expr,
+                ),
+            )
         elif statement.tag == 'expr_statement':
             self.generate_expression(statement.expr)
         elif statement.tag == 'return':
@@ -251,6 +263,9 @@ class FunctionWriter:
         else:
             print(statement.tag)
             raise NotImplementedError()
+
+    def generate_l_expr(self, l_expr):
+        raise NotImplementedError()
 
     def generate_if_statement(self, statement):
         condition = self.generate_expression(statement.condition)
