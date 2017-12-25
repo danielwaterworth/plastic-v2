@@ -7,6 +7,13 @@ extern
     ->
       ptr(i8)
 
+extern
+  puts
+    <-
+      ptr(i8),
+    ->
+      void
+
 struct
   chunk_t
     data: ptr(i8),
@@ -35,22 +42,10 @@ enum
     part(partial_http_result_t),
 
 define
-  bar
-  = {
-    return void;
-  }
-
-define
-  foo
-    <-
-      a: i8,
-      b: i8,
-    ->
-      data
+  entry
     = {
-      let d = data(a);
-      d.x = b;
-      return d;
+      # puts("Hello, world\oa\00");
+      return void;
     }
 
 # define

@@ -197,7 +197,17 @@ class LLVMWriter:
             raise NotImplementedError()
 
     def writeout_prelude(self):
-        self.write("declare void @llvm.trap()\n\n")
+        self.write("declare void @llvm.trap()\n")
+        self.write("\n")
+        self.write("define void @cb(i8*) {\n")
+        self.write("  ret void\n")
+        self.write("}\n")
+        self.write("define void @main() {\n")
+        self.write("  %stackptr = alloca i8, i32 1048576\n")
+        self.write("  call void @entry(i8* %stackptr, void (i8*)* @cb)\n")
+        self.write("  ret void\n")
+        self.write("}\n")
+        self.write("\n")
 
     def writeout_decls(self, decls):
         for decl in decls:
