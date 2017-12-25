@@ -382,7 +382,7 @@ class Parser:
             )
 
     def parse_assignment(self):
-        name = self.parse_identifier()
+        l_expr = self.parse_assignable_expr()
         self.skip_ws()
         symbol = self.parse_symbol()
         if symbol != '=':
@@ -392,7 +392,15 @@ class Parser:
         self.skip_ws()
         self.expect(';')
         self.skip_ws()
-        return ASTNode('assignment', name = name, expr = expr)
+        return ASTNode('assignment', l_expr = l_expr, expr = expr)
+
+    def parse_assignable_expr(self):
+        name = self.parse_identifier()
+        return \
+            ASTNode(
+                'variable',
+                name = name,
+            )
 
     def parse_break(self):
         name = self.parse_identifier()

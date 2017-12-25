@@ -44,10 +44,9 @@ define
     ->
       i8
     = {
-      loop {
-        bar();
-      }
-      
+      let x = a;
+      x = b;
+      return x;
     }
 
 # define

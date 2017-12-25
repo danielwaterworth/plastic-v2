@@ -497,16 +497,15 @@ class Environment:
                 new_env = self
             elif first_statement.tag == 'assignment':
                 expr = self.check_expression(first_statement.expr)
+                l_expr = self.check_l_expression(first_statement.l_expr)
                 compatible = \
-                    expr.ty.substitutable_for(
-                        self.lookup_term(first_statement.name)
-                    )
+                    expr.ty.substitutable_for(l_expr.ty)
                 if not compatible:
                     raise TypeError()
                 statement = \
                     TypedASTNode(
                         'assignment',
-                        name = first_statement.name,
+                        l_expr = l_expr,
                         expr = expr,
                     )
                 new_env = self
@@ -525,6 +524,18 @@ class Environment:
                 print(first_statement.tag)
                 raise NotImplementedError()
             return [statement] + new_env.check_body(rest)
+
+    def check_l_expression(self, l_expr):
+        if l_expr.tag == 'variable':
+            ty = self.lookup_term(l_expr.name)
+            return \
+                TypedASTNode(
+                    'variable',
+                    name = l_expr.name,
+                    ty = ty,
+                )
+        else:
+            raise NotImplementedError()
 
     def check_function(self, decl):
         args = [(name, self.check_type(ty)) for name, ty in decl.args]
