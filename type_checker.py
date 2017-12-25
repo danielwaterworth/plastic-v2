@@ -123,13 +123,15 @@ class Coroutine(TypeLevelExpr):
         return type(other) == Coroutine
 
 class FunctionType(TypeLevelExpr):
-    def __init__(self, arg_types, return_type):
+    def __init__(self, calling_convention, arg_types, return_type):
+        self.calling_convention = calling_convention
         self.arg_types = arg_types
         self.return_type = return_type
 
     def substitute(self, substitutions):
         return \
             FunctionType(
+                self.calling_convention,
                 [arg.substitute(substitutions) for arg in self.arg_types],
                 self.return_type.substitute(substitutions),
             )
@@ -252,7 +254,7 @@ class Environment:
         self.type_bindings[decl.name] = struct_type
         fields = [(name, self.check_type(ty)) for name, ty in decl.fields]
         self.term_bindings[decl.name] = \
-            FunctionType([ty for _, ty in fields], struct_type)
+            FunctionType('plastic', [ty for _, ty in fields], struct_type)
         struct_type.fields = dict(fields)
         return \
             TypedASTNode(
@@ -268,7 +270,7 @@ class Environment:
             [(name, self.check_type_list(ty)) for name, ty in decl.constructors]
         for name, args in constructors:
             self.term_bindings[name] = \
-                FunctionType(args, enum_type)
+                FunctionType('plastic', args, enum_type)
         enum_type.constructors = constructors
         return \
             TypedASTNode(
@@ -281,7 +283,7 @@ class Environment:
         arg_types = self.check_type_list(decl.arg_types)
         return_type = self.check_type(decl.return_type)
         self.term_bindings[decl.name] = \
-            FunctionType(arg_types, return_type)
+            FunctionType('c', arg_types, return_type)
         return \
             TypedASTNode(
                 'extern',
@@ -564,6 +566,7 @@ class Environment:
         if consume_type or product_type:
             self.term_bindings[decl.name] = \
                 FunctionType(
+                    'plastic',
                     [ty for _, ty in args],
                     TypeApplication(Coroutine(), [
                         consume_type or Void(),
@@ -574,6 +577,7 @@ class Environment:
         else:
             self.term_bindings[decl.name] = \
                 FunctionType(
+                    'plastic',
                     [ty for _, ty in args],
                     return_type,
                 )
@@ -632,6 +636,7 @@ global_term_environment = {
         LambdaType(
             ['a', 'b', 'c'],
             FunctionType(
+                'plastic',
                 [
                     TypeApplication(
                         Coroutine(),

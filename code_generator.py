@@ -33,7 +33,16 @@ def ptr_to(ty):
             ty = ty,
         )
 
+def array_of(of, size):
+    return \
+        CGASTNode(
+            'array',
+            of = of,
+            size = size,
+        )
+
 stack_ptr = ptr_to(byte)
+char_ptr = ptr_to(byte)
 
 def func(arg_types, return_type):
     return \
@@ -60,6 +69,7 @@ class FunctionWriter:
         self.basic_blocks = []
         self.functions = []
         self.stack = []
+        self.strings = []
 
     def copy_context(self):
         writer = \
@@ -104,7 +114,7 @@ class FunctionWriter:
                     "getelementptr",
                     source_type = arg_ptr,
                     value = temp0,
-                    offset = "-1",
+                    offset = ["-1"],
                     ret_name = temp1,
                 ),
                 CGASTNode(
@@ -155,28 +165,61 @@ class FunctionWriter:
             self.generate_expression(expr.expr)
             raise NotImplementedError()
         elif expr.tag == 'application':
-            return_type = \
-                self.code_generator.generate_llvm_type(
-                    expr.ty,
-                )
             function = self.generate_expression(expr.function)
             args = [self.generate_expression(arg) for arg in expr.args]
-            basic_block = self.basic_blocks[-1]
-            stack_ptr_val = self.stack_ptr_val
-            self.terminate_function(return_type)
-            llvm_function = self.functions[-1]
-            args = [
-                (stack_ptr_val, stack_ptr),
-                ('@' + llvm_function.name, continuation(return_type)),
-            ] + args
-            basic_block.terminator = \
-                CGASTNode(
-                    'tail_call',
-                    ret_type = void,
-                    function = function,
-                    args = args,
-                )
-            return "%$param"
+            if expr.function.ty.calling_convention == 'plastic':
+                return_type = \
+                    self.code_generator.generate_llvm_type(
+                        expr.ty,
+                    )
+                basic_block = self.basic_blocks[-1]
+                stack_ptr_val = self.stack_ptr_val
+                self.terminate_function(return_type)
+                llvm_function = self.functions[-1]
+                args = [
+                    (stack_ptr_val, stack_ptr),
+                    ('@' + llvm_function.name, continuation(return_type)),
+                ] + args
+                basic_block.terminator = \
+                    CGASTNode(
+                        'tail_call',
+                        ret_type = void,
+                        function = function,
+                        args = args,
+                    )
+                return "%$param"
+            elif expr.function.ty.calling_convention == 'c':
+                ret_type = \
+                    self.code_generator.generate_llvm_type(
+                        expr.function.ty.return_type
+                    )
+                args = \
+                    [(arg, self.code_generator.generate_llvm_type(ty))
+                        for ty, arg in zip(expr.function.ty.arg_types, args)]
+                if ret_type.tag == 'void':
+                    self.instructions.append(
+                        CGASTNode(
+                            'call',
+                            function = function,
+                            args = args,
+                            ret_type = ret_type,
+                        )
+                    )
+                    return 'void'
+                else:
+                    output = next(self.var)
+                    self.instructions.append(
+                        CGASTNode(
+                            'call',
+                            function = function,
+                            args = args,
+                            ret_name = output,
+                            ret_type = ret_type,
+                        )
+                    )
+                    return output
+            else:
+                raise NotImplementedError()
         elif expr.tag == '+':
             a = self.generate_expression(expr.a)
             b = self.generate_expression(expr.b)
@@ -194,8 +237,30 @@ class FunctionWriter:
         elif expr.tag == "variable":
             value = self.code_generator.lookup(expr.name)
             value = self.variables.get(expr.name, value)
-            assert value is not None
+            assert value is not None, expr.name
             return value
+        elif expr.tag == "string_literal":
+            value = next(self.code_generator.string)
+            ty = array_of(byte, len(expr.string))
+            self.strings.append(
+                CGASTNode(
+                    'string',
+                    value = expr.string,
+                    ty = ty,
+                    name = value,
+                )
+            )
+            var = next(self.var)
+            self.instructions.append(
+                CGASTNode(
+                    'getelementptr',
+                    source_type = ptr_to(ty),
+                    value = value,
+                    offset = ["0", "0"],
+                    ret_name = var,
+                )
+            )
+            return var
         print(expr.tag)
         raise NotImplementedError()
 
@@ -284,6 +349,10 @@ class FunctionWriter:
 
         self.functions.extend(true_writer.functions)
         self.functions.extend(false_writer.functions)
+
+        self.strings.extend(true_writer.strings)
+        self.strings.extend(false_writer.strings)
+
         self.instructions.append(
             CGASTNode(
                 'select',
@@ -341,7 +410,7 @@ class FunctionWriter:
                 "getelementptr",
                 source_type = arg_ptr,
                 value = temp0,
-                offset = "1",
+                offset = ["1"],
                 ret_name = temp1,
             ),
             CGASTNode(
@@ -399,13 +468,14 @@ class FunctionWriter:
         for statement in decl.body:
             self.generate_statement(statement)
 
-        return self.functions
+        return self.strings + self.functions
 
 class CodeGenerator:
     def __init__(self):
         self.structs = {}
         self.enums = {}
         self.functions = set()
+        self.string = map(lambda i: "@string.%i" % i, itertools.count())
 
     def lookup(self, name):
         if name == 'void':
@@ -453,6 +523,7 @@ class CodeGenerator:
         return [self.generate_llvm_type(ty) for ty in types]
 
     def generate_extern(self, decl):
+        self.functions.add(decl.name)
         return [
             CGASTNode(
                 'declare',

@@ -68,6 +68,15 @@ class LLVMWriter:
         self.writeout_type_list(decl.fields)
         self.write(" }\n")
 
+    def writeout_string(self, decl):
+        self.write(decl.name)
+        self.write(" = constant ")
+        self.writeout_type(decl.ty)
+        self.write(" c")
+        self.write('"')
+        self.write(decl.value)
+        self.write('", align 1\n')
+
     def writeout_arg(self, arg):
         (name, ty) = arg
         self.writeout_type(ty)
@@ -146,13 +155,15 @@ class LLVMWriter:
         elif instruction.tag == 'getelementptr':
             self.write(instruction.ret_name)
             self.write(" = getelementptr ")
+            assert instruction.source_type.tag == 'ptr_to'
             self.writeout_type(instruction.source_type.ty)
             self.write(", ")
             self.writeout_type(instruction.source_type)
             self.write(" ")
             self.write(instruction.value)
-            self.write(", i64 ")
-            self.write(instruction.offset)
+            for off in instruction.offset:
+                self.write(", i64 ")
+                self.write(off)
         elif instruction.tag == 'add':
             self.write(instruction.ret_name)
             self.write(" = add ")
@@ -182,10 +193,23 @@ class LLVMWriter:
             self.writeout_type(instruction.type)
             self.write(" ")
             self.write(instruction.false_value)
+        elif instruction.tag == 'call':
+            if instruction.ret_type.tag == 'void':
+                self.write("call ")
+            else:
+                self.write(instruction.ret_name)
+                self.write(" = call ")
+            self.writeout_type(instruction.ret_type)
+            self.write(" ")
+            self.write(instruction.function)
+            self.write("(")
+            self.writeout_arg_list(instruction.args)
+            self.write(")")
         else:
             print(instruction.tag)
             raise NotImplementedError()
         self.write("\n")
+
     def writeout_decl(self, decl):
         if decl.tag == 'declare':
             self.writeout_declare(decl)
@@ -193,6 +217,8 @@ class LLVMWriter:
             self.writeout_struct(decl)
         elif decl.tag == 'define':
             self.writeout_define(decl)
+        elif decl.tag == 'string':
+            self.writeout_string(decl)
         else:
             raise NotImplementedError()
 
