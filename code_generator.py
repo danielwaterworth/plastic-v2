@@ -228,60 +228,61 @@ class FunctionWriter:
                 )
             self.instructions = None
         elif statement.tag == 'if_statement':
-            condition = self.generate_expression(statement.condition)
-            true_writer = self.copy_context()
-            false_writer = self.copy_context()
-
-            true_writer.terminate_function(void)
-            false_writer.terminate_function(void)
-
-            true_function = true_writer.functions[0]
-
-            for s in statement.true_side:
-                true_writer.generate_statement(s)
-            for s in statement.false_side:
-                false_writer.generate_statement(s)
-
-            function_ptr = next(self.var)
-
-            self.functions.extend(true_writer.functions)
-            self.functions.extend(false_writer.functions)
-            self.instructions.append(
-                CGASTNode(
-                    'select',
-                    condition = condition,
-                    true_value = '@' + true_writer.functions[0].name,
-                    false_value = '@' + false_writer.functions[0].name,
-                    type = continuation(void),
-                    ret_name = function_ptr
-                )
-            )
-            self.basic_blocks[-1].terminator = \
-                CGASTNode(
-                    'tail_call',
-                    function = function_ptr,
-                    ret_type = void,
-                    args = [(self.stack_ptr_val, stack_ptr)],
-                )
-
-            self.terminate_function(void)
-            last_function = self.functions[-1]
-            tail_call = \
-                CGASTNode(
-                    'tail_call',
-                    function = '@' + last_function.name,
-                    ret_type = void,
-                    args = [(self.stack_ptr_val, stack_ptr)],
-                )
-            if true_writer.functions[-1].basic_blocks[-1].terminator is None:
-                true_writer.functions[-1].basic_blocks[-1].terminator = \
-                    tail_call
-            if false_writer.functions[-1].basic_blocks[-1].terminator is None:
-                false_writer.functions[-1].basic_blocks[-1].terminator = \
-                    tail_call
+            self.generate_if_statement(statement)
         else:
             print(statement.tag)
             raise NotImplementedError()
+
+    def generate_if_statement(self, statement):
+        condition = self.generate_expression(statement.condition)
+        true_writer = self.copy_context()
+        false_writer = self.copy_context()
+
+        true_writer.terminate_function(void)
+        false_writer.terminate_function(void)
+
+        true_function = true_writer.functions[0]
+
+        for s in statement.true_side:
+            true_writer.generate_statement(s)
+        for s in statement.false_side:
+            false_writer.generate_statement(s)
+
+        function_ptr = next(self.var)
+
+        self.functions.extend(true_writer.functions)
+        self.functions.extend(false_writer.functions)
+        self.instructions.append(
+            CGASTNode(
+                'select',
+                condition = condition,
+                true_value = '@' + true_writer.functions[0].name,
+                false_value = '@' + false_writer.functions[0].name,
+                type = continuation(void),
+                ret_name = function_ptr
+            )
+        )
+        self.basic_blocks[-1].terminator = \
+            CGASTNode(
+                'tail_call',
+                function = function_ptr,
+                ret_type = void,
+                args = [(self.stack_ptr_val, stack_ptr)],
+            )
+
+        self.terminate_function(void)
+        last_function = self.functions[-1]
+        tail_call = \
+            CGASTNode(
+                'tail_call',
+                function = '@' + last_function.name,
+                ret_type = void,
+                args = [(self.stack_ptr_val, stack_ptr)],
+            )
+        if true_writer.functions[-1].basic_blocks[-1].terminator is None:
+            true_writer.functions[-1].basic_blocks[-1].terminator = tail_call
+        if false_writer.functions[-1].basic_blocks[-1].terminator is None:
+            false_writer.functions[-1].basic_blocks[-1].terminator = tail_call
 
     def new_stack_variable(self, name, ty, value):
         self.stack.append((name, ty))
