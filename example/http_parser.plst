@@ -12,6 +12,10 @@ struct
     data: ptr(i8),
     size: u64,
 
+struct
+  data
+    x: i8,
+
 enum
   partial_http_result_t
     method_chunk(chunk_t),
@@ -42,11 +46,11 @@ define
       a: i8,
       b: i8,
     ->
-      i8
+      data
     = {
-      let x = a;
-      x = b;
-      return x;
+      let d = data(a);
+      d.x = b;
+      return d;
     }
 
 # define

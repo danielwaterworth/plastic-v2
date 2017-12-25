@@ -382,25 +382,77 @@ class Parser:
             )
 
     def parse_assignment(self):
-        l_expr = self.parse_assignable_expr()
+        l_expr = self.parse_l_expr()
+        print(l_expr)
         self.skip_ws()
+        print(self.next)
         symbol = self.parse_symbol()
+        print(symbol)
         if symbol != '=':
             raise ParseError()
         self.skip_ws()
         expr = self.parse_expression()
+        print(expr)
         self.skip_ws()
         self.expect(';')
         self.skip_ws()
         return ASTNode('assignment', l_expr = l_expr, expr = expr)
 
-    def parse_assignable_expr(self):
-        name = self.parse_identifier()
-        return \
-            ASTNode(
-                'variable',
-                name = name,
-            )
+    def parse_l_expr(self):
+        return self.parse_l_expr_1()
+
+    def parse_l_expr_1(self):
+        l_expr = self.parse_l_expr_0()
+        while True:
+            self.skip_ws()
+            if self.next == '.':
+                self.advance(1)
+                self.skip_ws()
+                field = self.parse_identifier()
+                l_expr = \
+                    ASTNode(
+                        'field_access',
+                        l_expr = l_expr,
+                        field = field,
+                    )
+            elif self.next == '[':
+                self.advance(1)
+                self.skip_ws()
+                expr = self.parse_expression()
+                self.skip_ws()
+                if self.next != ']':
+                    raise ParseError()
+                self.advance(1)
+                l_expr = \
+                    ASTNode(
+                        'array_access',
+                        l_expr = l_expr,
+                        index = expr,
+                    )
+            else:
+                return l_expr
+
+    def parse_l_expr_0(self):
+        if self.next == '(':
+            return self.parse_bracketed_l_expr()
+        else:
+            name = self.parse_identifier()
+            return \
+                ASTNode(
+                    'variable',
+                    name = name,
+                )
+
+    def parse_bracketed_l_expr(self):
+        assert self.next == '('
+        self.advance(1)
+        self.skip_ws()
+        l_expr = self.parse_l_expr()
+        self.skip_ws()
+        if self.next != ')':
+            raise ParseError()
+        self.advance(1)
+        return l_expr
 
     def parse_break(self):
         name = self.parse_identifier()
