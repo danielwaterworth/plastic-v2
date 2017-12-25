@@ -208,9 +208,25 @@ class FunctionWriter:
             self.variables[statement.name] = name
         elif statement.tag == 'loop_statement':
             self.terminate_function(void)
+            loop_body = self.functions[-1]
+            last_function = self.functions[-2]
             for s in statement.body:
                 self.generate_statement(s)
+            last_function_loop_body = self.functions[-1]
             self.terminate_function(void)
+            tail_call = \
+                CGASTNode(
+                    'tail_call',
+                    function = '@' + loop_body.name,
+                    ret_type = void,
+                    args = [(self.stack_ptr_val, stack_ptr)],
+                )
+            if last_function.basic_blocks[-1].terminator is None:
+                last_function.basic_blocks[-1].terminator = tail_call
+
+            if last_function_loop_body.basic_blocks[-1].terminator is None:
+                last_function_loop_body.basic_blocks[-1].terminator = tail_call
+
         elif statement.tag == 'break':
             raise NotImplementedError()
         elif statement.tag == 'assignment':
@@ -243,8 +259,6 @@ class FunctionWriter:
 
         true_writer.terminate_function(void)
         false_writer.terminate_function(void)
-
-        true_function = true_writer.functions[0]
 
         for s in statement.true_side:
             true_writer.generate_statement(s)
