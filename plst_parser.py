@@ -383,16 +383,12 @@ class Parser:
 
     def parse_assignment(self):
         l_expr = self.parse_l_expr()
-        print(l_expr)
         self.skip_ws()
-        print(self.next)
         symbol = self.parse_symbol()
-        print(symbol)
         if symbol != '=':
             raise ParseError()
         self.skip_ws()
         expr = self.parse_expression()
-        print(expr)
         self.skip_ws()
         self.expect(';')
         self.skip_ws()

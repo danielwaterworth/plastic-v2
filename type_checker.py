@@ -534,6 +534,20 @@ class Environment:
                     name = l_expr.name,
                     ty = ty,
                 )
+        elif l_expr.tag == 'field_access':
+            root = self.check_l_expression(l_expr.l_expr)
+            if type(root.ty) != StructType:
+                raise TypeError()
+            if l_expr.field not in root.ty.fields:
+                raise TypeError()
+            field_ty = root.ty.fields[l_expr.field]
+            return \
+                TypedASTNode(
+                    'field_access',
+                    l_expr = root,
+                    field = l_expr.field,
+                    ty = field_ty,
+                )
         else:
             raise NotImplementedError()
 
