@@ -118,13 +118,6 @@ class FunctionWriter:
                     ret_name = arg_name_ptr,
                 ),
                 CGASTNode(
-                    "load",
-                    source_type = arg_ptr,
-                    dest_type = arg_ty,
-                    value = arg_name_ptr,
-                    ret_name = arg_name,
-                ),
-                CGASTNode(
                     "bitcast",
                     dest_type = stack_ptr,
                     source_type = arg_ptr,
@@ -236,9 +229,25 @@ class FunctionWriter:
             return output
         elif expr.tag == "variable":
             value = self.code_generator.lookup(expr.name)
-            value = self.variables.get(expr.name, value)
-            assert value is not None, expr.name
-            return value
+            if value:
+                return value
+            else:
+                ptr = self.variables[expr.name]
+                var = next(self.var)
+                var_ty = \
+                    self.code_generator.generate_llvm_type(
+                        expr.ty
+                    )
+                self.instructions.append(
+                    CGASTNode(
+                        "load",
+                        source_type = ptr_to(var_ty),
+                        dest_type = var_ty,
+                        value = ptr,
+                        ret_name = var,
+                    )
+                )
+                return var
         elif expr.tag == "string_literal":
             value = next(self.code_generator.string)
             ty = array_of(byte, len(expr.string))
@@ -269,8 +278,8 @@ class FunctionWriter:
             value = self.generate_expression(statement.expr)
             name = '%' + statement.name
             ty = self.code_generator.generate_llvm_type(statement.expr.ty)
-            self.new_stack_variable(name, ty, value)
-            self.variables[statement.name] = name
+            self.variables[statement.name] = \
+                self.new_stack_variable(name, ty, value)
         elif statement.tag == 'loop_statement':
             self.terminate_function(void)
             loop_body = self.functions[-1]
@@ -315,10 +324,24 @@ class FunctionWriter:
             args = [(self.stack_frame_ptr_val, stack_ptr)]
             if self.return_type.tag != 'void':
                 args.append((value, self.return_type))
+
+            continuation_type = \
+                continuation(self.return_type)
+            continuation_var = next(self.var)
+            self.instructions.append(
+                CGASTNode(
+                    "load",
+                    source_type = ptr_to(continuation_type),
+                    dest_type = continuation_type,
+                    value = "%$continuation.ptr",
+                    ret_name = continuation_var,
+                )
+            )
+
             self.basic_blocks[-1].terminator = \
                 CGASTNode(
                     'tail_call',
-                    function = '%$continuation',
+                    function = continuation_var,
                     ret_type = void,
                     args = args,
                 )
@@ -441,7 +464,7 @@ class FunctionWriter:
         args = [(self.stack_ptr_val, stack_ptr)] + args_to_persist
 
         for arg_name, _ in decl.args:
-            self.variables[arg_name] = "%" + arg_name
+            self.variables[arg_name] = "%" + arg_name + '.ptr'
 
         for arg_name, arg_ty in args_to_persist:
             self.new_stack_variable(arg_name, arg_ty, arg_name)
