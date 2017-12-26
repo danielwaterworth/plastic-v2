@@ -19,10 +19,6 @@ struct
     data: ptr(i8),
     size: u64,
 
-struct
-  data
-    x: i8,
-
 enum
   partial_http_result_t
     method_chunk(chunk_t),
@@ -42,9 +38,17 @@ enum
     part(partial_http_result_t),
 
 define
+  bar
+    = {
+      return void;
+    }
+
+define
   entry
     = {
-      puts("Hello, world\00");
+      let s = "Hello, world\00";
+      bar();
+      puts(s);
       return void;
     }
 

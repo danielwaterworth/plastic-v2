@@ -98,9 +98,9 @@ class FunctionWriter:
         self.instructions = []
         self.stack_frame_ptr_val = self.stack_ptr_val
         for arg_name, arg_ty in reversed(self.stack):
+            arg_name_ptr = arg_name + '.ptr'
             arg_ptr = ptr_to(arg_ty)
-            temp0 = next(self.var)
-            temp1 = next(self.var)
+            temp = next(self.var)
             new_stack_ptr = next(self.stack_ptr)
             self.instructions.extend([
                 CGASTNode(
@@ -108,27 +108,27 @@ class FunctionWriter:
                     dest_type = arg_ptr,
                     source_type = stack_ptr,
                     value = self.stack_frame_ptr_val,
-                    ret_name = temp0,
+                    ret_name = temp,
                 ),
                 CGASTNode(
                     "getelementptr",
                     source_type = arg_ptr,
-                    value = temp0,
+                    value = temp,
                     offset = ["-1"],
-                    ret_name = temp1,
+                    ret_name = arg_name_ptr,
                 ),
                 CGASTNode(
                     "load",
                     source_type = arg_ptr,
                     dest_type = arg_ty,
-                    value = temp1,
+                    value = arg_name_ptr,
                     ret_name = arg_name,
                 ),
                 CGASTNode(
                     "bitcast",
                     dest_type = stack_ptr,
                     source_type = arg_ptr,
-                    value = temp1,
+                    value = arg_name_ptr,
                     ret_name = new_stack_ptr,
                 ),
             ])
@@ -386,9 +386,9 @@ class FunctionWriter:
             false_writer.functions[-1].basic_blocks[-1].terminator = tail_call
 
     def new_stack_variable(self, name, ty, value):
+        name_ptr = name + '.ptr'
         self.stack.append((name, ty))
-        temp0 = next(self.var)
-        temp1 = next(self.var)
+        temp = next(self.var)
         new_stack_ptr = next(self.stack_ptr)
         arg_ptr = ptr_to(ty)
         self.instructions.extend([
@@ -397,32 +397,33 @@ class FunctionWriter:
                 dest_type = arg_ptr,
                 source_type = stack_ptr,
                 value = self.stack_ptr_val,
-                ret_name = temp0,
+                ret_name = name_ptr,
             ),
             CGASTNode(
                 "store",
                 dest_type = arg_ptr,
                 source_type = ty,
                 value = value,
-                dest = temp0,
+                dest = name_ptr,
             ),
             CGASTNode(
                 "getelementptr",
                 source_type = arg_ptr,
-                value = temp0,
+                value = name_ptr,
                 offset = ["1"],
-                ret_name = temp1,
+                ret_name = temp,
             ),
             CGASTNode(
                 "bitcast",
                 dest_type = stack_ptr,
                 source_type = arg_ptr,
-                value = temp1,
+                value = temp,
                 ret_name = new_stack_ptr,
             ),
         ])
 
         self.stack_ptr_val = new_stack_ptr
+        return name_ptr
 
     def generate_function(self, decl):
         self.function_names = \
