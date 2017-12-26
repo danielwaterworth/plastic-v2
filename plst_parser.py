@@ -213,8 +213,37 @@ class Parser:
             self.advance(1)
             st = ""
             while self.next != '"':
-                st += self.next
-                self.advance(1)
+                if self.next == '\\':
+                    self.advance(1)
+                    hex_digits = '0123456789abcdefABCDEF'
+                    if self.next == '\\':
+                        st += '\\'
+                        self.advance(1)
+                    elif self.next == '"':
+                        st += '"'
+                        self.advance(1)
+                    elif self.next == 'n':
+                        st += '\n'
+                        self.advance(1)
+                    elif self.next == 't':
+                        st += '\t'
+                        self.advance(1)
+                    elif self.next == 'r':
+                        st += '\r'
+                        self.advance(1)
+                    else:
+                        if not self.next in hex_digits:
+                            raise ParseError()
+                        d = self.next
+                        self.advance(1)
+                        if not self.next in hex_digits:
+                            raise ParseError()
+                        d += self.next
+                        self.advance(1)
+                        st += chr(int(d, 16))
+                else:
+                    st += self.next
+                    self.advance(1)
             self.advance(1)
             return ASTNode('string_literal', string = st)
         else:

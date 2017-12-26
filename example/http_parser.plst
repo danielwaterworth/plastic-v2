@@ -44,7 +44,7 @@ enum
 define
   entry
     = {
-      puts("Hello, world");
+      puts("Hello, world\00");
       return void;
     }
 
