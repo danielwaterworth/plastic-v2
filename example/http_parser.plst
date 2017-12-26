@@ -48,6 +48,7 @@ define
     = {
       let s = "Hello, world\00";
       bar();
+      s = "Goodbye, world\00";
       puts(s);
       return void;
     }

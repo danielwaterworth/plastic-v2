@@ -353,6 +353,8 @@ class FunctionWriter:
             raise NotImplementedError()
 
     def generate_l_expr(self, l_expr):
+        if l_expr.tag == 'variable':
+            return self.variables[l_expr.name]
         raise NotImplementedError()
 
     def generate_if_statement(self, statement):
