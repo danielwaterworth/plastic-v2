@@ -1,4 +1,6 @@
 import sys
+
+import lexer
 import plst_parser
 import type_checker
 import code_generator
@@ -240,7 +242,9 @@ class LLVMWriter:
             self.writeout_decl(decl)
 
 with open(sys.argv[1], 'r') as fd:
-    decls = plst_parser.Parser(fd.read()).parse_file()
+    src = fd.read()
+    tokens = lexer.Lexer(src).lex()
+    decls = plst_parser.Parser(src).parse_file()
 
 env = \
     type_checker.Environment(
