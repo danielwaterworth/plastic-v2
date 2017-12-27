@@ -28,6 +28,20 @@ keywords = {
     'yield',
 }
 
+special_symbols = {
+    '(': 'open_paren',
+    ')': 'close_paren',
+    '{': 'open_brace',
+    '}': 'close_brace',
+    '[': 'open_square',
+    ']': 'close_square',
+    ',': 'comma',
+    '.': 'dot',
+    '@': 'at',
+    ':': 'colon',
+    ';': 'semicolon',
+}
+
 class Lexer:
     def __init__(self, text):
         self.remaining = text
@@ -143,39 +157,9 @@ class Lexer:
     def lex(self):
         self.skip_ws()
         while not self.eof():
-            if self.next == '(':
+            if self.next in special_symbols:
+                self.tokens.append(Token(special_symbols[self.next]))
                 self.advance(1)
-                self.tokens.append(Token('open_paren'))
-            elif self.next == ')':
-                self.advance(1)
-                self.tokens.append(Token('close_paren'))
-            elif self.next == '{':
-                self.advance(1)
-                self.tokens.append(Token('open_brace'))
-            elif self.next == '}':
-                self.advance(1)
-                self.tokens.append(Token('close_brace'))
-            elif self.next == '[':
-                self.advance(1)
-                self.tokens.append(Token('open_square'))
-            elif self.next == ']':
-                self.advance(1)
-                self.tokens.append(Token('close_square'))
-            elif self.next == ',':
-                self.advance(1)
-                self.tokens.append(Token('comma'))
-            elif self.next == '.':
-                self.advance(1)
-                self.tokens.append(Token('dot'))
-            elif self.next == '@':
-                self.advance(1)
-                self.tokens.append(Token('at'))
-            elif self.next == ':':
-                self.advance(1)
-                self.tokens.append(Token('colon'))
-            elif self.next == ';':
-                self.advance(1)
-                self.tokens.append(Token('semicolon'))
             elif self.next == '"':
                 self.tokens.append(self.lex_string())
             elif self.next == '\'':
