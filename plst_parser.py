@@ -363,59 +363,39 @@ class Parser:
         self.expect('semicolon')
         return ASTNode('return', expr = expr)
 
+    def try_(self, func):
+        self.save()
+        try:
+            output = func()
+        except ParseError:
+            self.restore()
+        else:
+            self.discard()
+            return output
+
     def parse_statement(self):
-        self.save()
-        try:
-            statement = self.parse_let_statement()
-        except ParseError:
-            self.restore()
-        else:
-            self.discard()
+        statement = self.try_(self.parse_let_statement)
+        if statement:
             return statement
 
-        self.save()
-        try:
-            statement = self.parse_loop_statement()
-        except ParseError:
-            self.restore()
-        else:
-            self.discard()
+        statement = self.try_(self.parse_loop_statement)
+        if statement:
             return statement
 
-        self.save()
-        try:
-            statement = self.parse_if_statement()
-        except ParseError:
-            self.restore()
-        else:
-            self.discard()
+        statement = self.try_(self.parse_if_statement)
+        if statement:
             return statement
 
-        self.save()
-        try:
-            statement = self.parse_assignment()
-        except ParseError:
-            self.restore()
-        else:
-            self.discard()
+        statement = self.try_(self.parse_assignment)
+        if statement:
             return statement
 
-        self.save()
-        try:
-            statement = self.parse_break()
-        except ParseError:
-            self.restore()
-        else:
-            self.discard()
+        statement = self.try_(self.parse_break)
+        if statement:
             return statement
 
-        self.save()
-        try:
-            statement = self.parse_return()
-        except ParseError:
-            self.restore()
-        else:
-            self.discard()
+        statement = self.try_(self.parse_return)
+        if statement:
             return statement
 
         expr = self.parse_expression()
@@ -426,15 +406,11 @@ class Parser:
         statements = []
 
         while True:
-            self.save()
-            try:
-                statement = self.parse_statement()
-            except ParseError:
-                self.restore()
-                break
-            else:
-                self.discard()
+            statement = self.try_(self.parse_statement)
+            if statement:
                 statements.append(statement)
+            else:
+                break
 
         self.expect('close_brace')
 
