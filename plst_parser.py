@@ -48,6 +48,10 @@ class Parser:
         if self.expect('symbol').symbol != symbol:
             raise ParseError()
 
+    def expect_keyword(self, keyword):
+        if self.expect('keyword').keyword != keyword:
+            raise ParseError()
+
     def parse_type_arg_list(self):
         things = []
         while True:
@@ -60,6 +64,9 @@ class Parser:
                     self.advance()
                     return things
                 self.expect('comma')
+
+    def parse_keyword(self):
+        return self.expect('keyword').keyword
 
     def parse_identifier(self):
         return self.expect('identifier').name
@@ -167,11 +174,14 @@ class Parser:
         elif self.next.tag == 'identifier':
             name = self.next.name
             self.advance()
+            return ASTNode('variable', name = name)
+        elif self.next.tag == 'keyword':
+            name = self.next.keyword
             if name == 'yield':
                 expr = self.parse_expression()
                 return ASTNode('yield_expression', expr = expr)
             else:
-                return ASTNode('variable', name = name)
+                raise ParseError()
         else:
             n = self.parse_number()
             return ASTNode('number_literal', n = n)
@@ -181,10 +191,8 @@ class Parser:
         while not self.eof():
             if self.next.tag == 'open_paren':
                 self.advance()
-                print('arg')
                 args = self.parse_term_arg_list()
                 expr = ASTNode('application', function = expr, args = args)
-                print(expr)
             elif self.next.tag == 'dot':
                 self.advance()
                 field = self.parse_identifier()
@@ -203,7 +211,7 @@ class Parser:
         while not self.eof():
             self.save()
             try:
-                symbol = self.parse_identifier()
+                symbol = self.parse_keyword()
                 if symbol == 'as':
                     self.discard()
                     type = self.parse_type()
@@ -260,9 +268,7 @@ class Parser:
         return self.parse_expression_4()
 
     def parse_let_statement(self):
-        name = self.parse_identifier()
-        if name != 'let':
-            raise ParseError()
+        self.expect_keyword('let')
         name = self.parse_identifier()
         self.expect_symbol('=')
         expr = self.parse_expression()
@@ -270,23 +276,17 @@ class Parser:
         return ASTNode('let_statement', name = name, expr = expr)
 
     def parse_loop_statement(self):
-        name = self.parse_identifier()
-        if name != 'loop':
-            raise ParseError()
+        self.expect_keyword('loop')
         self.expect('open_brace')
         body = self.parse_body()
         return ASTNode('loop_statement', body = body)
 
     def parse_if_statement(self):
-        name = self.parse_identifier()
-        if name != 'if':
-            raise ParseError()
+        self.expect_keyword('if')
         condition = self.parse_expression()
         self.expect('open_brace')
         true_side = self.parse_body()
-        name = self.parse_identifier()
-        if name != 'else':
-            raise ParseError()
+        self.expect_keyword('else')
         self.expect('open_brace')
         false_side = self.parse_body()
 
@@ -347,23 +347,18 @@ class Parser:
                 )
 
     def parse_bracketed_l_expr(self):
-        assert self.next.tag == 'open_paren'
-        self.advance()
+        self.expect('open_paren')
         l_expr = self.parse_l_expr()
         self.expect('close_paren')
         return l_expr
 
     def parse_break(self):
-        name = self.parse_identifier()
-        if name != 'break':
-            raise ParseError()
+        self.expect_keyword('break')
         self.expect('semicolon')
         return ASTNode('break')
 
     def parse_return(self):
-        name = self.parse_identifier()
-        if name != 'return':
-            raise ParseError()
+        self.expect_keyword('return')
         expr = self.parse_expression()
         self.expect('semicolon')
         return ASTNode('return', expr = expr)
@@ -441,7 +436,6 @@ class Parser:
                 self.discard()
                 statements.append(statement)
 
-        print(self.next)
         self.expect('close_brace')
 
         return statements
@@ -573,7 +567,7 @@ class Parser:
             )
 
     def parse_top_level_decl(self):
-        type = self.parse_identifier()
+        type = self.parse_keyword()
         if type == 'enum':
             return self.parse_enum()
         elif type == 'struct':
@@ -589,6 +583,5 @@ class Parser:
         decls = []
         while not self.eof():
             decl = self.parse_top_level_decl()
-            print(decl)
             decls.append(decl)
         return decls

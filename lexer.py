@@ -13,6 +13,21 @@ class Token:
 
 symbol_chars = '<>+-='
 
+keywords = {
+    'as',
+    'break',
+    'define',
+    'else',
+    'enum',
+    'extern',
+    'if',
+    'let',
+    'loop',
+    'return',
+    'struct',
+    'yield',
+}
+
 class Lexer:
     def __init__(self, text):
         self.remaining = text
@@ -59,6 +74,8 @@ class Lexer:
         while not self.eof() and self.next_is_valid_identifier_char():
             output += self.next
             self.advance(1)
+        if output in keywords:
+            return Token('keyword', keyword = output)
         return Token('identifier', name = output)
 
     def lex_number(self):
