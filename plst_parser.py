@@ -12,102 +12,69 @@ class ASTNode:
         return "ASTNode(%s, %s)" % (repr(self.tag), repr(self.attributes))
 
 class Parser:
-    def __init__(self, remaining):
-        self.remaining = remaining
-        self.line = 1
+    def __init__(self, tokens):
+        self.tokens = tokens
+        self.index = 0
         self.stack = []
 
     @property
     def next(self):
-        return self.remaining[0]
+        return self.tokens[self.index]
+
+    def advance(self):
+        self.index += 1
+        assert self.index <= len(self.tokens)
 
     def save(self):
-        self.stack.append((self.remaining, self.line))
+        self.stack.append(self.index)
 
     def restore(self):
-        (self.remaining, self.line) = self.stack.pop()
+        self.index = self.stack.pop()
 
     def discard(self):
         self.stack.pop()
 
     def eof(self):
-        return len(self.remaining) == 0
+        return self.index == len(self.tokens)
 
-    def expect(self, s):
-        if not self.remaining.startswith(s):
+    def expect(self, tag):
+        token = self.next
+        if self.next.tag != tag:
             raise ParseError()
-        else:
-            self.advance(len(s))
+        self.advance()
+        return token
 
-    def advance(self, n):
-        self.line += self.remaining[:n].count('\n')
-        self.remaining = self.remaining[n:]
-
-    def skip_ws(self):
-        while True:
-            while not self.eof() and self.next in ' \n\t\r':
-                self.advance(1)
-            if not self.eof() and self.next == '#':
-                while not self.eof() and self.next != '\n':
-                    self.advance(1)
-            else:
-                break
-
-    def next_is_valid_identifier_char(self):
-        next = self.next
-        return next.isalpha() or next.isdigit() or next in '_'
-
-    def parse_identifier(self):
-        output = ""
-        if not self.next.isalpha():
+    def expect_symbol(self, symbol):
+        if self.expect('symbol').symbol != symbol:
             raise ParseError()
-        output += self.next
-        self.advance(1)
-        while not self.eof() and self.next_is_valid_identifier_char():
-            output += self.next
-            self.advance(1)
-        return output
-
-    def parse_symbol(self):
-        output = ""
-        while not self.eof() and self.next in "-=><+*":
-            output += self.next
-            self.advance(1)
-        if len(output) == 0:
-            raise ParseError()
-        return output
-
-    def parse_number(self):
-        output = ""
-        while not self.eof() and self.next.isdigit():
-            output += self.next
-            self.advance(1)
-        if len(output) == 0:
-            raise ParseError()
-        return int(output)
 
     def parse_type_arg_list(self):
         things = []
         while True:
-            if self.next == ')':
-                self.advance(1)
+            if self.next.tag == 'close_paren':
+                self.advance()
                 return things
             else:
                 things.append(self.parse_type())
-                self.skip_ws()
-                if self.next == ')':
-                    self.advance(1)
+                if self.next.tag == 'close_paren':
+                    self.advance()
                     return things
-                self.expect(',')
-                self.skip_ws()
+                self.expect('comma')
+
+    def parse_identifier(self):
+        return self.expect('identifier').name
+
+    def parse_number(self):
+        return self.expect('number').n
+
+    def parse_symbol(self):
+        return self.expect('symbol').symbol
 
     def parse_type(self):
         name = self.parse_identifier()
-        self.skip_ws()
         output = ASTNode('named_type', name = name)
-        if self.next == '(':
-            self.advance(1)
-            self.skip_ws()
+        if self.next.tag == 'open_paren':
+            self.advance()
             return \
                 ASTNode(
                     'type_application',
@@ -119,20 +86,15 @@ class Parser:
 
     def parse_enum(self):
         name = self.parse_identifier()
-        self.skip_ws()
         constructors = []
 
         while True:
             self.save()
             try:
                 constructor_name = self.parse_identifier()
-                self.skip_ws()
-                self.expect('(')
-                self.skip_ws()
+                self.expect('open_paren')
                 values = self.parse_type_arg_list()
-                self.skip_ws()
-                self.expect(',')
-                self.skip_ws()
+                self.expect('comma')
             except ParseError:
                 self.restore()
                 break
@@ -149,20 +111,15 @@ class Parser:
 
     def parse_struct(self):
         name = self.parse_identifier()
-        self.skip_ws()
         fields = []
 
         while True:
             self.save()
             try:
                 field_name = self.parse_identifier()
-                self.skip_ws()
-                self.expect(':')
-                self.skip_ws()
+                self.expect('colon')
                 value = self.parse_type()
-                self.skip_ws()
-                self.expect(',')
-                self.skip_ws()
+                self.expect('comma')
             except ParseError:
                 self.restore()
                 break
@@ -180,111 +137,61 @@ class Parser:
     def parse_term_arg_list(self):
         things = []
         while True:
-            if self.next == ')':
-                self.advance(1)
+            if self.next.tag == 'close_paren':
+                self.advance()
                 return things
             else:
                 things.append(self.parse_expression())
-                self.skip_ws()
-                if self.next == ')':
-                    self.advance(1)
+                if self.next.tag == 'close_paren':
+                    self.advance()
                     return things
-                self.expect(',')
-                self.skip_ws()
+                self.expect('comma')
 
     def parse_bracketed_expression(self):
-        self.expect('(')
-        self.skip_ws()
+        self.expect('open_paren')
         expr = self.parse_expression()
-        self.skip_ws()
-        self.expect(')')
+        self.expect('close_paren')
         return expr
 
     def parse_expression_0(self):
-        if self.next == '(':
+        if self.next.tag == 'open_paren':
             return self.parse_bracketed_expression()
-        elif self.next == '\'':
-            self.advance(1)
-            c = self.next
-            self.advance(1)
-            self.expect('\'')
+        elif self.next.tag == 'character':
+            c = self.next.c
+            self.advance()
             return ASTNode('character_literal', character = c)
-        elif self.next == '"':
-            self.advance(1)
-            st = ""
-            while self.next != '"':
-                if self.next == '\\':
-                    self.advance(1)
-                    hex_digits = '0123456789abcdefABCDEF'
-                    if self.next == '\\':
-                        st += '\\'
-                        self.advance(1)
-                    elif self.next == '"':
-                        st += '"'
-                        self.advance(1)
-                    elif self.next == 'n':
-                        st += '\n'
-                        self.advance(1)
-                    elif self.next == 't':
-                        st += '\t'
-                        self.advance(1)
-                    elif self.next == 'r':
-                        st += '\r'
-                        self.advance(1)
-                    else:
-                        if not self.next in hex_digits:
-                            raise ParseError()
-                        d = self.next
-                        self.advance(1)
-                        if not self.next in hex_digits:
-                            raise ParseError()
-                        d += self.next
-                        self.advance(1)
-                        st += chr(int(d, 16))
-                else:
-                    st += self.next
-                    self.advance(1)
-            self.advance(1)
+        elif self.next.tag == 'string':
+            st = self.next.string
+            self.advance()
             return ASTNode('string_literal', string = st)
-        else:
-            self.save()
-            try:
-                name = self.parse_identifier()
-            except ParseError:
-                self.restore()
+        elif self.next.tag == 'identifier':
+            name = self.next.name
+            self.advance()
+            if name == 'yield':
+                expr = self.parse_expression()
+                return ASTNode('yield_expression', expr = expr)
             else:
-                self.discard()
-                self.skip_ws()
-                if name == 'yield':
-                    expr = self.parse_expression()
-                    return ASTNode('yield_expression', expr = expr)
-                else:
-                    return ASTNode('variable', name = name)
-
+                return ASTNode('variable', name = name)
+        else:
             n = self.parse_number()
-            self.skip_ws()
             return ASTNode('number_literal', n = n)
 
     def parse_expression_1(self):
         expr = self.parse_expression_0()
-        self.skip_ws()
         while not self.eof():
-            if self.next == '(':
-                self.advance(1)
+            if self.next.tag == 'open_paren':
+                self.advance()
+                print('arg')
                 args = self.parse_term_arg_list()
-                self.skip_ws()
                 expr = ASTNode('application', function = expr, args = args)
-            elif self.next == '.':
-                self.advance(1)
-                self.skip_ws()
+                print(expr)
+            elif self.next.tag == 'dot':
+                self.advance()
                 field = self.parse_identifier()
-                self.skip_ws()
                 expr = ASTNode('field_access', x = expr, field = field)
-            elif self.next == '@':
-                self.advance(1)
-                self.skip_ws()
-                self.expect('(')
-                self.skip_ws()
+            elif self.next.tag == 'at':
+                self.advance()
+                self.expect('open_paren')
                 args = self.parse_type_arg_list()
                 expr = ASTNode('apply_type_args', function = expr, args = args)
             else:
@@ -293,14 +200,12 @@ class Parser:
 
     def parse_expression_2(self):
         expr = self.parse_expression_1()
-        self.skip_ws()
         while not self.eof():
             self.save()
             try:
                 symbol = self.parse_identifier()
                 if symbol == 'as':
                     self.discard()
-                    self.skip_ws()
                     type = self.parse_type()
                     expr = ASTNode('cast', expr = expr, type = type)
                 else:
@@ -313,19 +218,16 @@ class Parser:
 
     def parse_expression_3(self):
         expr = self.parse_expression_2()
-        self.skip_ws()
         while not self.eof():
             self.save()
             try:
                 symbol = self.parse_symbol()
                 if symbol == '-':
                     self.discard()
-                    self.skip_ws()
                     other = self.parse_expression_2()
                     expr = ASTNode('-', a = expr, b = other)
                 elif symbol == '+':
                     self.discard()
-                    self.skip_ws()
                     other = self.parse_expression_2()
                     expr = ASTNode('+', a = expr, b = other)
                 else:
@@ -338,16 +240,13 @@ class Parser:
 
     def parse_expression_4(self):
         expr = self.parse_expression_3()
-        self.skip_ws()
         while not self.eof():
             self.save()
             try:
                 symbol = self.parse_symbol()
-                self.skip_ws()
                 if symbol == '==':
                     self.discard()
                     other = self.parse_expression_3()
-                    self.skip_ws()
                     expr = ASTNode('==', a = expr, b = other)
                 else:
                     self.restore()
@@ -362,44 +261,33 @@ class Parser:
 
     def parse_let_statement(self):
         name = self.parse_identifier()
-        self.skip_ws()
         if name != 'let':
             raise ParseError()
         name = self.parse_identifier()
-        self.skip_ws()
-        self.expect('=')
-        self.skip_ws()
+        self.expect_symbol('=')
         expr = self.parse_expression()
-        self.expect(';')
+        self.expect('semicolon')
         return ASTNode('let_statement', name = name, expr = expr)
 
     def parse_loop_statement(self):
         name = self.parse_identifier()
-        self.skip_ws()
         if name != 'loop':
             raise ParseError()
-        self.expect('{')
-        self.skip_ws()
+        self.expect('open_brace')
         body = self.parse_body()
         return ASTNode('loop_statement', body = body)
 
     def parse_if_statement(self):
         name = self.parse_identifier()
-        self.skip_ws()
         if name != 'if':
             raise ParseError()
         condition = self.parse_expression()
-        self.skip_ws()
-        self.expect('{')
-        self.skip_ws()
+        self.expect('open_brace')
         true_side = self.parse_body()
-        self.skip_ws()
         name = self.parse_identifier()
         if name != 'else':
             raise ParseError()
-        self.skip_ws()
-        self.expect('{')
-        self.skip_ws()
+        self.expect('open_brace')
         false_side = self.parse_body()
 
         return \
@@ -412,15 +300,9 @@ class Parser:
 
     def parse_assignment(self):
         l_expr = self.parse_l_expr()
-        self.skip_ws()
-        symbol = self.parse_symbol()
-        if symbol != '=':
-            raise ParseError()
-        self.skip_ws()
+        self.expect_symbol('=')
         expr = self.parse_expression()
-        self.skip_ws()
-        self.expect(';')
-        self.skip_ws()
+        self.expect('close_brace')
         return ASTNode('assignment', l_expr = l_expr, expr = expr)
 
     def parse_l_expr(self):
@@ -429,10 +311,8 @@ class Parser:
     def parse_l_expr_1(self):
         l_expr = self.parse_l_expr_0()
         while True:
-            self.skip_ws()
-            if self.next == '.':
-                self.advance(1)
-                self.skip_ws()
+            if self.next.tag == 'dot':
+                self.advance()
                 field = self.parse_identifier()
                 l_expr = \
                     ASTNode(
@@ -440,14 +320,12 @@ class Parser:
                         l_expr = l_expr,
                         field = field,
                     )
-            elif self.next == '[':
-                self.advance(1)
-                self.skip_ws()
+            elif self.next.tag == 'open_square':
+                self.advance()
                 expr = self.parse_expression()
-                self.skip_ws()
-                if self.next != ']':
+                if self.next.tag != 'close_square':
                     raise ParseError()
-                self.advance(1)
+                self.advance()
                 l_expr = \
                     ASTNode(
                         'array_access',
@@ -458,7 +336,7 @@ class Parser:
                 return l_expr
 
     def parse_l_expr_0(self):
-        if self.next == '(':
+        if self.next.tag == 'open_paren':
             return self.parse_bracketed_l_expr()
         else:
             name = self.parse_identifier()
@@ -469,34 +347,25 @@ class Parser:
                 )
 
     def parse_bracketed_l_expr(self):
-        assert self.next == '('
-        self.advance(1)
-        self.skip_ws()
+        assert self.next.tag == 'open_paren'
+        self.advance()
         l_expr = self.parse_l_expr()
-        self.skip_ws()
-        if self.next != ')':
-            raise ParseError()
-        self.advance(1)
+        self.expect('close_paren')
         return l_expr
 
     def parse_break(self):
         name = self.parse_identifier()
         if name != 'break':
             raise ParseError()
-        self.skip_ws()
-        self.expect(';')
-        self.skip_ws()
+        self.expect('semicolon')
         return ASTNode('break')
 
     def parse_return(self):
         name = self.parse_identifier()
         if name != 'return':
             raise ParseError()
-        self.skip_ws()
         expr = self.parse_expression()
-        self.skip_ws()
-        self.expect(';')
-        self.skip_ws()
+        self.expect('semicolon')
         return ASTNode('return', expr = expr)
 
     def parse_statement(self):
@@ -555,8 +424,7 @@ class Parser:
             return statement
 
         expr = self.parse_expression()
-        self.skip_ws()
-        self.expect(';')
+        self.expect('semicolon')
         return ASTNode('expr_statement', expr = expr)
 
     def parse_body(self):
@@ -566,7 +434,6 @@ class Parser:
             self.save()
             try:
                 statement = self.parse_statement()
-                self.skip_ws()
             except ParseError:
                 self.restore()
                 break
@@ -574,13 +441,13 @@ class Parser:
                 self.discard()
                 statements.append(statement)
 
-        self.expect('}')
+        print(self.next)
+        self.expect('close_brace')
 
         return statements
 
     def parse_function(self):
         name = self.parse_identifier()
-        self.skip_ws()
         args = []
         product_type = None
         consume_type = None
@@ -590,21 +457,15 @@ class Parser:
         self.save()
         symbol = self.parse_symbol()
 
-        self.skip_ws()
-
         if symbol == "<-":
             self.discard()
             while True:
                 self.save()
                 try:
                     arg_name = self.parse_identifier()
-                    self.skip_ws()
-                    self.expect(':')
-                    self.skip_ws()
+                    self.expect('colon')
                     arg_type = self.parse_type()
-                    self.skip_ws()
-                    self.expect(',')
-                    self.skip_ws()
+                    self.expect('comma')
                 except ParseError:
                     self.restore()
                     break
@@ -616,7 +477,6 @@ class Parser:
                 symbol = self.parse_symbol()
             except ParseError:
                 symbol = None
-            self.skip_ws()
 
         if symbol == '<=':
             self.discard()
@@ -627,7 +487,6 @@ class Parser:
                 symbol = self.parse_symbol()
             except ParseError:
                 symbol = None
-            self.skip_ws()
 
         if symbol == '=>':
             self.discard()
@@ -638,7 +497,6 @@ class Parser:
                 symbol = self.parse_symbol()
             except ParseError:
                 symbol = None
-            self.skip_ws()
 
         if symbol == "->":
             self.discard()
@@ -649,15 +507,12 @@ class Parser:
                 symbol = self.parse_symbol()
             except ParseError:
                 symbol = None
-            self.skip_ws()
 
         if symbol != '=':
             raise ParseError('function with no body')
 
         self.discard()
-        self.skip_ws()
-        self.expect('{')
-        self.skip_ws()
+        self.expect('open_brace')
 
         body = self.parse_body()
 
@@ -674,7 +529,6 @@ class Parser:
 
     def parse_extern(self):
         name = self.parse_identifier()
-        self.skip_ws()
 
         arg_types = []
         return_type = ASTNode('void')
@@ -685,17 +539,13 @@ class Parser:
         except ParseError:
             symbol = None
 
-        self.skip_ws()
-
         if symbol == "<-":
             self.discard()
             while True:
                 self.save()
                 try:
                     arg_type = self.parse_type()
-                    self.skip_ws()
-                    self.expect(',')
-                    self.skip_ws()
+                    self.expect('comma')
                 except ParseError:
                     self.restore()
                     break
@@ -707,7 +557,6 @@ class Parser:
                 symbol = self.parse_symbol()
             except ParseError:
                 symbol = None
-            self.skip_ws()
 
         if symbol == "->":
             self.discard()
@@ -725,7 +574,6 @@ class Parser:
 
     def parse_top_level_decl(self):
         type = self.parse_identifier()
-        self.skip_ws()
         if type == 'enum':
             return self.parse_enum()
         elif type == 'struct':
@@ -738,9 +586,9 @@ class Parser:
             raise ParseError('unknown top-level entity: %s' % type)
 
     def parse_file(self):
-        self.skip_ws()
         decls = []
         while not self.eof():
-            decls.append(self.parse_top_level_decl())
-            self.skip_ws()
+            decl = self.parse_top_level_decl()
+            print(decl)
+            decls.append(decl)
         return decls

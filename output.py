@@ -244,7 +244,7 @@ class LLVMWriter:
 with open(sys.argv[1], 'r') as fd:
     src = fd.read()
     tokens = lexer.Lexer(src).lex()
-    decls = plst_parser.Parser(src).parse_file()
+    decls = plst_parser.Parser(tokens).parse_file()
 
 env = \
     type_checker.Environment(

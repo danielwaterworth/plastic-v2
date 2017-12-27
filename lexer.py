@@ -66,7 +66,7 @@ class Lexer:
         while not self.eof() and self.next.isdigit():
             s += self.next
             self.advance(1)
-        return Token('number', int(s))
+        return Token('number', n = int(s))
 
     def lex_symbol(self):
         s = ""
@@ -147,6 +147,12 @@ class Lexer:
             elif self.next == ',':
                 self.advance(1)
                 self.tokens.append(Token('comma'))
+            elif self.next == '.':
+                self.advance(1)
+                self.tokens.append(Token('dot'))
+            elif self.next == '@':
+                self.advance(1)
+                self.tokens.append(Token('at'))
             elif self.next == ':':
                 self.advance(1)
                 self.tokens.append(Token('colon'))
@@ -166,3 +172,4 @@ class Lexer:
             else:
                 raise NotImplementedError()
             self.skip_ws()
+        return self.tokens
