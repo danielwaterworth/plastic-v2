@@ -44,12 +44,16 @@ define
     }
 
 define
-  entry
+  main
     = {
+      let s = "Hello, world1\00";
       loop {
         let s = "Hello, world\00";
-        bar();
+        puts(s);
+        break;
       }
+      puts(s);
+      return void;
     }
 
 # define

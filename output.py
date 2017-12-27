@@ -54,7 +54,7 @@ class LLVMWriter:
     def writeout_declare(self, decl):
         fd.write('declare ')
         self.writeout_type(decl.return_type)
-        self.write(' @')
+        self.write(' ')
         self.write(decl.name)
         if len(decl.arg_types) == 0:
             self.write('()')
@@ -81,7 +81,7 @@ class LLVMWriter:
         self.write('", align 1\n')
 
     def writeout_arg(self, arg):
-        (name, ty) = arg
+        (ty, name) = arg
         self.writeout_type(ty)
         self.write(' ')
         self.write(name)
@@ -91,10 +91,9 @@ class LLVMWriter:
 
     def writeout_define(self, decl):
         self.write('define ')
-        self.write(' '.join(decl.linkage))
-        self.write(' ')
+        self.write(''.join(map(lambda x: x + ' ', decl.linkage)))
         self.writeout_type(decl.return_type)
-        self.write(' @')
+        self.write(' ')
         self.write(decl.name)
         self.write('(')
         self.writeout_arg_list(decl.args)
@@ -114,8 +113,7 @@ class LLVMWriter:
         if not terminator:
             self.write("  call void @llvm.trap()\n")
             self.write("  unreachable\n")
-            return
-        if terminator.tag == 'tail_call':
+        elif terminator.tag == 'tail_call':
             if terminator.ret_type.tag == 'void':
                 self.write("  tail call ")
                 self.writeout_type(terminator.ret_type)
@@ -132,13 +130,21 @@ class LLVMWriter:
                 self.write("(")
                 self.writeout_arg_list(terminator.args)
                 self.write(")\n  ret %$tail_output\n")
+        elif terminator.tag == 'return':
+            self.write("  ret ")
+            self.write(terminator.value)
+            self.write("\n")
+        elif terminator.tag == 'unconditional_branch':
+            self.write("  br label %")
+            self.write(terminator.to)
+            self.write("\n")
         else:
             raise NotImplementedError()
 
     def writeout_instruction(self, instruction):
         self.write("  ")
         if instruction.tag == 'bitcast':
-            self.write(instruction.ret_name)
+            self.write(instruction.dst)
             self.write(" = bitcast ")
             self.writeout_type(instruction.source_type)
             self.write(" ")
@@ -147,16 +153,16 @@ class LLVMWriter:
             self.writeout_type(instruction.dest_type)
         elif instruction.tag == 'store':
             self.write("store ")
-            self.writeout_type(instruction.source_type)
+            self.writeout_type(instruction.ty)
             self.write(" ")
-            self.write(instruction.value)
+            self.write(instruction.source)
             self.write(", ")
-            self.writeout_type(instruction.dest_type)
+            self.writeout_type(new_code_generator.ptr_to(instruction.ty))
             self.write(" ")
-            self.write(instruction.dest)
+            self.write(instruction.dst)
             self.write(', align 1')
         elif instruction.tag == 'getelementptr':
-            self.write(instruction.ret_name)
+            self.write(instruction.dst)
             self.write(" = getelementptr ")
             assert instruction.source_type.tag == 'ptr_to'
             self.writeout_type(instruction.source_type.ty)
@@ -168,7 +174,7 @@ class LLVMWriter:
                 self.write(", i64 ")
                 self.write(off)
         elif instruction.tag == 'add':
-            self.write(instruction.ret_name)
+            self.write(instruction.dst)
             self.write(" = add ")
             self.writeout_type(instruction.ty)
             self.write(" ")
@@ -176,16 +182,16 @@ class LLVMWriter:
             self.write(", ")
             self.write(instruction.b)
         elif instruction.tag == 'load':
-            self.write(instruction.ret_name)
+            self.write(instruction.dst)
             self.write(" = load ")
-            self.writeout_type(instruction.dest_type)
+            self.writeout_type(instruction.ty)
             self.write(", ")
-            self.writeout_type(instruction.source_type)
+            self.writeout_type(new_code_generator.ptr_to(instruction.ty))
             self.write(" ")
-            self.write(instruction.value)
+            self.write(instruction.source)
             self.write(', align 1')
         elif instruction.tag == 'select':
-            self.write(instruction.ret_name)
+            self.write(instruction.dst)
             self.write(" = select i1 ")
             self.write(instruction.condition)
             self.write(", ")
@@ -197,17 +203,21 @@ class LLVMWriter:
             self.write(" ")
             self.write(instruction.false_value)
         elif instruction.tag == 'call':
-            if instruction.ret_type.tag == 'void':
+            if instruction.return_type.tag == 'void':
                 self.write("call ")
             else:
-                self.write(instruction.ret_name)
+                self.write(instruction.dst)
                 self.write(" = call ")
-            self.writeout_type(instruction.ret_type)
+            self.writeout_type(instruction.return_type)
             self.write(" ")
             self.write(instruction.function)
             self.write("(")
             self.writeout_arg_list(instruction.args)
             self.write(")")
+        elif instruction.tag == 'alloca':
+            self.write(instruction.dst)
+            self.write(" = alloca ")
+            self.writeout_type(instruction.ty)
         else:
             print(instruction.tag)
             raise NotImplementedError()
@@ -227,15 +237,6 @@ class LLVMWriter:
 
     def writeout_prelude(self):
         self.write("declare void @llvm.trap()\n")
-        self.write("\n")
-        self.write("define void @cb(i8*) {\n")
-        self.write("  ret void\n")
-        self.write("}\n")
-        self.write("define void @main() {\n")
-        self.write("  %stackptr = alloca i8, i32 1048576\n")
-        self.write("  call void @entry(i8* %stackptr, void (i8*)* @cb)\n")
-        self.write("  ret void\n")
-        self.write("}\n")
         self.write("\n")
 
     def writeout_decls(self, decls):
@@ -260,5 +261,5 @@ llvm_decls = new_code_generator.CodeGenerator().generate(type_checked_decls)
 
 with open(sys.argv[2], 'w') as fd:
     writer = LLVMWriter(fd)
-    # writer.writeout_prelude()
+    writer.writeout_prelude()
     writer.writeout_decls(llvm_decls)
