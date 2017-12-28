@@ -491,6 +491,8 @@ class CodeGenerator:
             return number(ty.width)
         elif type_checker.is_ptr(ty):
             return ptr_to(self.generate_type(ty.args[0]))
+        elif type_checker.is_array(ty):
+            return array_of(self.generate_type(ty.args[0]), ty.args[1].n)
         elif type(ty) == type_checker.StructType:
             return named_type(ty.name)
         elif type(ty) == type_checker.EnumType:
@@ -524,7 +526,15 @@ class CodeGenerator:
         ]
 
     def generate_struct(self, decl):
-        return []
+        fields = \
+            [(name, self.generate_type(ty)) for name, ty in decl.fields]
+        return [
+            CGASTNode(
+                'struct',
+                name = decl.name,
+                fields = [ty for _, ty in fields],
+            )
+        ]
 
     def generate_enum(self, decl):
         return []

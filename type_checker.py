@@ -203,6 +203,12 @@ def is_ptr(x):
             return True
     return False
 
+def is_array(x):
+    if type(x) == TypeApplication:
+        if type(x.function) == Array:
+            return True
+    return False
+
 class TypedASTNode:
     def __init__(self, tag, **kwargs):
         self.tag = tag
