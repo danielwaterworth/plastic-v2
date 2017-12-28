@@ -200,6 +200,45 @@ class FunctionWriter:
         )
         return dst
 
+    def zext(self, from_ty, to_ty, value):
+        dst = next(self.variable_names)
+        self.current_basic_block.instructions.append(
+            CGASTNode(
+                'zext',
+                dst = dst,
+                from_ty = from_ty,
+                to_ty = to_ty,
+                value = value,
+            )
+        )
+        return dst
+
+    def sext(self, from_ty, to_ty, value):
+        dst = next(self.variable_names)
+        self.current_basic_block.instructions.append(
+            CGASTNode(
+                'sext',
+                dst = dst,
+                from_ty = from_ty,
+                to_ty = to_ty,
+                value = value,
+            )
+        )
+        return dst
+
+    def truncate(self, from_ty, to_ty, value):
+        dst = next(self.variable_names)
+        self.current_basic_block.instructions.append(
+            CGASTNode(
+                'truncate',
+                dst = dst,
+                from_ty = from_ty,
+                to_ty = to_ty,
+                value = value,
+            )
+        )
+        return dst
+
     def global_string_constant(self, string):
         return self.code_generator.global_string_constant(string)
 
@@ -239,7 +278,19 @@ class FunctionWriter:
         raise NotImplementedError()
 
     def generate_cast(self, expr):
-        raise NotImplementedError()
+        from_ty, value = self.generate_expression(expr.expr)
+        to_ty = self.generate_type(expr.ty)
+        assert from_ty.tag == 'number'
+        assert to_ty.tag == 'number'
+        if from_ty.width == to_ty.width:
+            return to_ty, value
+        elif from_ty.width > to_ty.width:
+            return to_ty, self.truncate(from_ty, to_ty, value)
+        else:
+            if expr.ty.signed:
+                return to_ty, self.sext(from_ty, to_ty, value)
+            else:
+                return to_ty, self.zext(from_ty, to_ty, value)
 
     def generate_eq(self, expr):
         raise NotImplementedError()
@@ -255,7 +306,8 @@ class FunctionWriter:
         return ty, self.sub(a, b, ty)
 
     def generate_number_literal(self, expr):
-        raise NotImplementedError()
+        ty = self.generate_type(expr.ty)
+        return ty, str(expr.n)
 
     def generate_string_literal(self, expr):
         ty, value = self.global_string_constant(expr.string)

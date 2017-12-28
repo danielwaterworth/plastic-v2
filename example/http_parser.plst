@@ -14,6 +14,13 @@ extern
     ->
       void
 
+extern
+  putchar
+    <-
+      u32,
+    ->
+      void
+
 struct
   chunk_t
     data: ptr(i8),
@@ -47,7 +54,8 @@ define
   main
     = {
       if true {
-        puts("true\00");
+        putchar('t' as u32);
+        puts("rue\00");
       } else {
         puts("false\00");
       }
