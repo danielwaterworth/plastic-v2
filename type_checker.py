@@ -347,7 +347,8 @@ class Environment:
             ty = self.check_type(expr.type)
             castable = \
                 type(to_cast.ty) == Number or \
-                is_ptr(to_cast.ty)
+                is_ptr(to_cast.ty) or \
+                type(to_cast.ty) == OpaqueNumber
             if not castable:
                 raise TypeError()
             if type(ty) != Number:
@@ -603,6 +604,16 @@ class Environment:
                 body = body,
             )
 
+    def check_constant(self, decl):
+        expr = self.check_expression(decl.expr)
+        self.term_bindings[decl.name] = expr.ty
+        return \
+            TypedASTNode(
+                'constant',
+                name = decl.name,
+                expr = expr,
+            )
+
     def check_top_level_decl(self, decl):
         if decl.tag == 'extern':
             return self.check_extern(decl)
@@ -612,6 +623,8 @@ class Environment:
             return self.check_enum(decl)
         elif decl.tag == 'function':
             return self.check_function(decl)
+        elif decl.tag == 'constant':
+            return self.check_constant(decl)
         raise NotImplementedError()
 
     def check_top_level_decls(self, decls):

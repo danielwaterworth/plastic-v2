@@ -1,4 +1,54 @@
 extern
+  socket
+    <-
+      u32,
+      u32,
+      u32,
+    ->
+      u32
+
+constant
+  af_inet
+    2 as u32
+
+constant
+  af_inet6
+    10 as u32
+
+constant
+  sock_stream
+    1 as u32
+
+constant
+  default_protocol
+    0 as u32
+
+extern
+  bind
+    <-
+      u32,
+      ptr(i8),
+      ptr(u32),
+    ->
+      u32
+
+struct
+  sockaddr
+    sa_family: i16,
+    sa_data: array(i8, 14),
+
+struct
+  addrinfo
+    ai_flags: i32,
+    ai_family: i32,
+    ai_socktype: i32,
+    ai_protocol: i32,
+    ai_addrlen: u32,
+    ai_addr: ptr(sockaddr),
+    ai_canonname: ptr(i8),
+    ai_next: ptr(addrinfo),
+
+extern
   memchr
     <-
       ptr(i8),
@@ -45,21 +95,14 @@ enum
     part(partial_http_result_t),
 
 define
-  bar
-    = {
-      return void;
-    }
-
-define
   main
     = {
-      if true {
-        putchar('t' as u32);
-        puts("rue\00");
-      } else {
-        puts("false\00");
-      }
-      return void;
+      let accept_sock = socket(af_inet, sock_stream, default_protocol);
+      # if (bind(accept_sock, ) == 0) {
+      #   return void;
+      # } else {
+      #   return void;
+      # }
     }
 
 # define

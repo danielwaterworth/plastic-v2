@@ -255,6 +255,28 @@ class LLVMWriter:
             raise NotImplementedError()
         self.write("\n")
 
+    def writeout_global(self, decl):
+        self.write(decl.name)
+        self.write(" = constant ")
+        self.writeout_type(decl.ty)
+        self.write(" ")
+        self.write(decl.value)
+        self.write('\n')
+
+    def writeout_global_constructors(self, decl):
+        self.write("@llvm.global_ctors = appending global [")
+        self.write(str(len(decl.funcs)))
+        self.write(" x %$constructor] [")
+        first = True
+        for func in decl.funcs:
+            if not first:
+                self.write(", ")
+            first = False
+            self.write("%$constructor { i32 65535, void ()* ")
+            self.write(func)
+            self.write(", i8* null }")
+        self.write("]\n")
+
     def writeout_decl(self, decl):
         if decl.tag == 'declare':
             self.writeout_declare(decl)
@@ -264,11 +286,16 @@ class LLVMWriter:
             self.writeout_define(decl)
         elif decl.tag == 'string':
             self.writeout_string(decl)
+        elif decl.tag == 'global':
+            self.writeout_global(decl)
+        elif decl.tag == 'global_constructors':
+            self.writeout_global_constructors(decl)
         else:
             raise NotImplementedError()
 
     def writeout_prelude(self):
         self.write("declare void @llvm.trap()\n")
+        self.write("%$constructor = type { i32, void ()*, i8* }")
         self.write("\n")
 
     def writeout_decls(self, decls):

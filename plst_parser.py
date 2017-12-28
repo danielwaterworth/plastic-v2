@@ -542,6 +542,16 @@ class Parser:
                 return_type = return_type,
             )
 
+    def parse_constant(self):
+        name = self.parse_identifier()
+        expr = self.parse_expression()
+        return \
+            ASTNode(
+                'constant',
+                name = name,
+                expr = expr,
+            )
+
     def parse_top_level_decl(self):
         type = self.parse_keyword()
         if type == 'enum':
@@ -552,6 +562,8 @@ class Parser:
             return self.parse_function()
         elif type == 'extern':
             return self.parse_extern()
+        elif type == 'constant':
+            return self.parse_constant()
         else:
             raise ParseError('unknown top-level entity: %s' % type)
 

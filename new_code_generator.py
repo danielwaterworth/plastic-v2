@@ -260,6 +260,9 @@ class FunctionWriter:
         elif expr.name in self.scope:
             ty, ptr = self.scope[expr.name]
             return ty, self.load(ty, ptr)
+        elif expr.name in self.code_generator.constants:
+            ty, ptr = self.code_generator.constants[expr.name]
+            return ty, self.load(ty, ptr)
         raise NotImplementedError()
 
     def generate_application(self, expr):
@@ -464,8 +467,11 @@ class FunctionWriter:
 class CodeGenerator:
     def __init__(self):
         self.string_names = map(lambda i: "@string.%d" % i, itertools.count())
+        self.function_names = map(lambda i: "@function.%d" % i, itertools.count())
         self.strings = []
         self.functions = {}
+        self.constants = {}
+        self.constructors = []
 
     def global_string_constant(self, string):
         value = next(self.string_names)
@@ -493,6 +499,8 @@ class CodeGenerator:
             return void
         elif type(ty) == type_checker.Boolean:
             return number(1)
+        elif type(ty) == type_checker.OpaqueNumber:
+            return number(64)
         print(ty)
         raise NotImplementedError()
 
@@ -552,6 +560,31 @@ class CodeGenerator:
             ),
         ]
 
+    def generate_constant(self, decl):
+        function_name = next(self.function_names)
+        function_writer = FunctionWriter(self)
+        ty, value = function_writer.generate_expression(decl.expr)
+        function_writer.current_basic_block.terminator = return_(void, 'void')
+        function_writer.store('@' + decl.name, ty, value)
+        self.constants[decl.name] = ty, '@' + decl.name
+        self.constructors.append(function_name)
+        return [
+            CGASTNode(
+                'global',
+                name = '@' + decl.name,
+                ty = ty,
+                value = 'undef',
+            ),
+            CGASTNode(
+                'define',
+                linkage = ['private'],
+                name = function_name,
+                args = [],
+                basic_blocks = function_writer.basic_blocks,
+                return_type = void,
+            ),
+        ]
+
     def generate_decl(self, decl):
         if decl.tag == 'extern':
             return self.generate_extern(decl)
@@ -561,8 +594,16 @@ class CodeGenerator:
             return self.generate_enum(decl)
         elif decl.tag == 'function':
             return self.generate_function(decl)
+        elif decl.tag == 'constant':
+            return self.generate_constant(decl)
         raise NotImplementedError()
 
     def generate(self, decls):
+        constructors = [
+            CGASTNode(
+                'global_constructors',
+                funcs = self.constructors
+            ),
+        ]
         llvm_decls = concat([self.generate_decl(decl) for decl in decls])
-        return self.strings + llvm_decls
+        return self.strings + llvm_decls + constructors

@@ -26,6 +26,7 @@ keywords = {
     'return',
     'struct',
     'yield',
+    'constant',
 }
 
 special_symbols = {
