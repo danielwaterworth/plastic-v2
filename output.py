@@ -138,6 +138,14 @@ class LLVMWriter:
             self.write("  br label %")
             self.write(terminator.to)
             self.write("\n")
+        elif terminator.tag == 'conditional_branch':
+            self.write("  br i1 ")
+            self.write(terminator.condition)
+            self.write(", label %")
+            self.write(terminator.true_block)
+            self.write(", label %")
+            self.write(terminator.false_block)
+            self.write("\n")
         else:
             raise NotImplementedError()
 

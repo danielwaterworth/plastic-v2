@@ -52,6 +52,7 @@ void = \
     CGASTNode(
         'void'
     )
+boolean = number(1)
 byte = number(8)
 byte_ptr = ptr_to(byte)
 
@@ -71,6 +72,15 @@ def unconditional_branch(block):
         CGASTNode(
             'unconditional_branch',
             to = block,
+        )
+
+def conditional_branch(condition, true_block, false_block):
+    return \
+        CGASTNode(
+            'conditional_branch',
+            condition = condition,
+            true_block = true_block,
+            false_block = false_block,
         )
 
 class FunctionWriter:
@@ -202,6 +212,10 @@ class FunctionWriter:
     def generate_variable(self, expr):
         if expr.name == 'void':
             return void, 'void'
+        elif expr.name == 'true':
+            return boolean, '1'
+        elif expr.name == 'false':
+            return boolean, '0'
         elif expr.name in self.code_generator.functions:
             return self.code_generator.functions[expr.name]
         elif expr.name in self.scope:
@@ -289,10 +303,10 @@ class FunctionWriter:
             llvm_type = self.generate_type(statement.expr.ty)
             self.let_allocations[id(statement)] = self.alloca(llvm_type)
         elif statement.tag == 'if_statement':
-            for statement in statement.true_side:
-                self.generate_allocations(statement)
-            for statement in statement.false_side:
-                self.generate_allocations(statement)
+            for s in statement.true_side:
+                self.generate_allocations(s)
+            for s in statement.false_side:
+                self.generate_allocations(s)
         elif statement.tag == 'loop_statement':
             for statement in statement.body:
                 self.generate_allocations(statement)
@@ -328,7 +342,39 @@ class FunctionWriter:
         raise NotImplementedError()
 
     def generate_if_statement(self, statement):
-        raise NotImplementedError()
+        scope = dict(self.scope)
+
+        _, condition = self.generate_expression(statement.condition)
+
+        prev_block = self.current_basic_block
+        self.new_basic_block()
+        true_block = self.current_basic_block
+        self.new_basic_block()
+        false_block = self.current_basic_block
+        self.new_basic_block()
+        after_block = self.current_basic_block
+
+        prev_block.terminator = \
+            conditional_branch(
+                condition,
+                true_block.label,
+                false_block.label,
+            )
+
+        self.scope = dict(scope)
+        self.current_basic_block = true_block
+        self.generate_statements(statement.true_side)
+        self.current_basic_block.terminator = \
+            unconditional_branch(after_block.label)
+
+        self.scope = dict(scope)
+        self.current_basic_block = false_block
+        self.generate_statements(statement.false_side)
+        self.current_basic_block.terminator = \
+            unconditional_branch(after_block.label)
+
+        self.scope = dict(scope)
+        self.current_basic_block = after_block
 
     def generate_break(self):
         break_block = self.current_basic_block
@@ -348,7 +394,7 @@ class FunctionWriter:
             self.generate_loop_statement(statement)
         elif statement.tag == 'assignment':
             self.generate_assignment(statement)
-        elif statement.tag == 'if':
+        elif statement.tag == 'if_statement':
             self.generate_if_statement(statement)
         elif statement.tag == 'expr_statement':
             self.generate_expression(statement.expr)

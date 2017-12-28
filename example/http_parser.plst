@@ -46,13 +46,11 @@ define
 define
   main
     = {
-      let s = "Hello, world1\00";
-      loop {
-        let s = "Hello, world\00";
-        puts(s);
-        break;
+      if true {
+        puts("true\00");
+      } else {
+        puts("false\00");
       }
-      puts(s);
       return void;
     }
 
