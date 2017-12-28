@@ -487,7 +487,7 @@ class CodeGenerator:
         return ty, value
 
     def generate_type(self, ty):
-        if type(ty) == type_checker.Number:
+        if type(ty) == type_checker.NumberType:
             return number(ty.width)
         elif type_checker.is_ptr(ty):
             return ptr_to(self.generate_type(ty.args[0]))
@@ -499,7 +499,7 @@ class CodeGenerator:
             return void
         elif type(ty) == type_checker.Boolean:
             return number(1)
-        elif type(ty) == type_checker.OpaqueNumber:
+        elif type(ty) == type_checker.OpaqueNumberType:
             return number(64)
         print(ty)
         raise NotImplementedError()

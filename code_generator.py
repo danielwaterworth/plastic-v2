@@ -514,7 +514,7 @@ class CodeGenerator:
             return '@' + name
 
     def generate_llvm_type(self, ty):
-        if type(ty) == type_checker.Number:
+        if type(ty) == type_checker.NumberType:
             return \
                 CGASTNode(
                     'number',

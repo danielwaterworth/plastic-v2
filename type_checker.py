@@ -7,6 +7,12 @@ class StarKind(Kind):
 
 star = StarKind()
 
+class NatKind(Kind):
+    def __eq__(self, other):
+        return type(other) == NatKind
+
+nat = NatKind()
+
 class FunctionKind(Kind):
     def __init__(self, arg_kinds, return_kind):
         self.arg_kinds = arg_kinds
@@ -48,6 +54,23 @@ ptr = Ptr()
 def ptr_to(ty):
     return TypeApplication(ptr, [ty])
 
+class Array(TypeLevelExpr):
+    kind = FunctionKind([star, nat], star)
+
+    def __eq__(self, other):
+        return type(other) == Array
+
+array = Array()
+
+class NatLiteral(TypeLevelExpr):
+    kind = nat
+
+    def __init__(self, n):
+        self.n = n
+
+    def __eq__(self, other):
+        return type(other) == NatLiteral and self.n == other.n
+
 class OpaquePtr(TypeLevelExpr):
     kind = star
 
@@ -60,7 +83,7 @@ class Boolean(TypeLevelExpr):
     def __eq__(self, other):
         return type(other) == Boolean
 
-class Number(TypeLevelExpr):
+class NumberType(TypeLevelExpr):
     kind = star
 
     def __init__(self, signed, width):
@@ -69,15 +92,15 @@ class Number(TypeLevelExpr):
 
     def __eq__(self, other):
         return \
-            type(other) == Number and \
+            type(other) == NumberType and \
             self.signed == other.signed and \
             self.width == other.width
 
-class OpaqueNumber(TypeLevelExpr):
+class OpaqueNumberType(TypeLevelExpr):
     kind = star
 
     def substitutable_for(self, other):
-        return type(other) == Number
+        return type(other) == NumberType
 
 class TypeApplication(TypeLevelExpr):
     def __init__(self, function, args):
@@ -164,7 +187,7 @@ class LambdaType(TypeLevelExpr):
             del substitutions[arg]
         return self.body.substitute(substitutions)
 
-char = Number(True, 8)
+char = NumberType(True, 8)
 char_ptr = ptr_to(char)
 
 def list_substitutable_for(args, expected):
@@ -244,6 +267,8 @@ class Environment:
             if tuple(function_kind.arg_kinds) != tuple(arg_kinds):
                 raise TypeError()
             return TypeApplication(function, args)
+        elif ty.tag == 'type_number':
+            return NatLiteral(ty.n)
         raise NotImplementedError()
 
     def check_type_list(self, types):
@@ -346,12 +371,12 @@ class Environment:
             to_cast = self.check_expression(expr.expr)
             ty = self.check_type(expr.type)
             castable = \
-                type(to_cast.ty) == Number or \
+                type(to_cast.ty) == NumberType or \
                 is_ptr(to_cast.ty) or \
-                type(to_cast.ty) == OpaqueNumber
+                type(to_cast.ty) == OpaqueNumberType
             if not castable:
                 raise TypeError()
-            if type(ty) != Number:
+            if type(ty) != NumberType:
                 raise TypeError()
             return \
                 TypedASTNode(
@@ -364,7 +389,7 @@ class Environment:
                 TypedASTNode(
                     'number_literal',
                     n = ord(expr.character),
-                    ty = Number(False, 8),
+                    ty = NumberType(False, 8),
                 )
         elif expr.tag == '==':
             a = self.check_expression(expr.a)
@@ -412,7 +437,7 @@ class Environment:
                 TypedASTNode(
                     'number_literal',
                     n = expr.n,
-                    ty = OpaqueNumber(),
+                    ty = OpaqueNumberType(),
                 )
         elif expr.tag == 'string_literal':
             return \
@@ -633,10 +658,12 @@ class Environment:
 global_type_environment = {
     'void': void,
     'ptr': ptr,
+    'array': array,
     'i8': char,
-    'i32': Number(True, 32),
-    'u32': Number(False, 32),
-    'u64': Number(False, 64),
+    'i16': NumberType(True, 16),
+    'i32': NumberType(True, 32),
+    'u32': NumberType(False, 32),
+    'u64': NumberType(False, 64),
     'bool': Boolean(),
 }
 

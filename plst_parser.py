@@ -78,18 +78,28 @@ class Parser:
         return self.expect('symbol').symbol
 
     def parse_type(self):
-        name = self.parse_identifier()
-        output = ASTNode('named_type', name = name)
-        if self.next.tag == 'open_paren':
-            self.advance()
+        if self.next.tag == 'identifier':
+            name = self.parse_identifier()
+            output = ASTNode('named_type', name = name)
+            if self.next.tag == 'open_paren':
+                self.advance()
+                return \
+                    ASTNode(
+                        'type_application',
+                        function = output,
+                        args = self.parse_type_arg_list(),
+                    )
+            else:
+                return output
+        elif self.next.tag == 'number':
+            n = self.parse_number()
             return \
                 ASTNode(
-                    'type_application',
-                    function = output,
-                    args = self.parse_type_arg_list(),
+                    'type_number',
+                    n = n,
                 )
         else:
-            return output
+            raise ParseError()
 
     def parse_enum(self):
         name = self.parse_identifier()
