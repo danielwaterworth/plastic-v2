@@ -1,18 +1,22 @@
 constant
   af_inet
-    2 as u32
+    2
 
 constant
   af_inet6
-    10 as u32
+    10
 
 constant
   sock_stream
-    1 as u32
+    1
 
 constant
   default_protocol
-    0 as u32
+    0
+
+constant
+  ai_passive
+    1
 
 struct
   sockaddr
@@ -112,7 +116,7 @@ define
       let addr: ptr(addrinfo) = null;
       let hints =
         addrinfo(
-          0,
+          ai_passive,
           0,
           0,
           0,
@@ -121,8 +125,13 @@ define
           null,
           null,
         );
-      if (getaddrinfo(null, "http", &hints, &addr) == 0) {
+      if (getaddrinfo(null, "5000\00", &hints, &addr) == 0) {
         puts("success\00");
+        if (addr == null as ptr(addrinfo)) {
+          puts("what\00");
+        } else {
+          puts("yay\00");
+        }
         return void;
       } else {
         puts("fail\00");

@@ -387,20 +387,25 @@ class Environment:
                 )
         elif expr.tag == 'cast':
             to_cast = self.check_expression(expr.expr)
-            ty = self.check_type(expr.type)
-            castable = \
-                type(to_cast.ty) == NumberType or \
-                is_ptr(to_cast.ty) or \
-                type(to_cast.ty) == OpaqueNumberType
-            if not castable:
-                raise TypeError()
-            if type(ty) != NumberType:
+            from_ty = to_cast.ty
+            to_ty = self.check_type(expr.type)
+            if type(to_ty) == NumberType:
+                castable = \
+                    type(from_ty) == NumberType or \
+                    is_ptr(from_ty) or \
+                    type(from_ty) == OpaqueNumberType
+                if not castable:
+                    raise TypeError()
+            elif is_ptr(to_ty):
+                if not is_ptr(from_ty):
+                    raise TypeError()
+            else:
                 raise TypeError()
             return \
                 TypedASTNode(
                     'cast',
                     expr = to_cast,
-                    ty = ty,
+                    ty = to_ty,
                 )
         elif expr.tag == 'character_literal':
             return \

@@ -340,7 +340,7 @@ class FunctionWriter:
     def generate_eq(self, expr):
         a_ty, a = self.generate_expression(expr.a)
         b_ty, b = self.generate_expression(expr.b)
-        if a_ty.tag == 'number':
+        if a_ty.tag == 'number' or a_ty.tag == 'ptr_to':
             return boolean, self.icmp('eq', a_ty, a, b)
         else:
             raise NotImplementedError()
