@@ -217,7 +217,19 @@ class Parser:
         return expr
 
     def parse_expression_2(self):
-        expr = self.parse_expression_1()
+        if self.next.tag == 'ampersand':
+            self.advance()
+            expr = self.parse_l_expr()
+            return \
+                ASTNode(
+                    'address_of',
+                    expr = expr,
+                )
+        else:
+            return self.parse_expression_1()
+
+    def parse_expression_4(self):
+        expr = self.parse_expression_2()
         while not self.eof():
             self.save()
             try:
@@ -234,19 +246,19 @@ class Parser:
                 break
         return expr
 
-    def parse_expression_3(self):
-        expr = self.parse_expression_2()
+    def parse_expression_5(self):
+        expr = self.parse_expression_4()
         while not self.eof():
             self.save()
             try:
                 symbol = self.parse_symbol()
                 if symbol == '-':
                     self.discard()
-                    other = self.parse_expression_2()
+                    other = self.parse_expression_4()
                     expr = ASTNode('-', a = expr, b = other)
                 elif symbol == '+':
                     self.discard()
-                    other = self.parse_expression_2()
+                    other = self.parse_expression_4()
                     expr = ASTNode('+', a = expr, b = other)
                 else:
                     self.restore()
@@ -256,15 +268,15 @@ class Parser:
                 break
         return expr
 
-    def parse_expression_4(self):
-        expr = self.parse_expression_3()
+    def parse_expression_6(self):
+        expr = self.parse_expression_5()
         while not self.eof():
             self.save()
             try:
                 symbol = self.parse_symbol()
                 if symbol == '==':
                     self.discard()
-                    other = self.parse_expression_3()
+                    other = self.parse_expression_5()
                     expr = ASTNode('==', a = expr, b = other)
                 else:
                     self.restore()
@@ -275,15 +287,20 @@ class Parser:
         return expr
 
     def parse_expression(self):
-        return self.parse_expression_4()
+        return self.parse_expression_6()
 
     def parse_let_statement(self):
         self.expect_keyword('let')
         name = self.parse_identifier()
+        if self.next.tag == 'colon':
+            self.advance()
+            ty = self.parse_type()
+        else:
+            ty = None
         self.expect_symbol('=')
         expr = self.parse_expression()
         self.expect('semicolon')
-        return ASTNode('let_statement', name = name, expr = expr)
+        return ASTNode('let_statement', name = name, expr = expr, ty = ty)
 
     def parse_loop_statement(self):
         self.expect_keyword('loop')

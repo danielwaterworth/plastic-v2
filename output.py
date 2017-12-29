@@ -13,6 +13,16 @@ class LLVMWriter:
     def write(self, string):
         return self.fd.write(string)
 
+    def writeout_value(self, value):
+        if isinstance(value, str):
+            self.write(value)
+        elif len(value) == 0:
+            self.write("{}")
+        else:
+            self.write('{ ')
+            self.writeout_arg_list(value)
+            self.write(' }')
+
     def writeout_csl(self, items, function):
         if len(items) == 0:
             return
@@ -84,7 +94,7 @@ class LLVMWriter:
         (ty, name) = arg
         self.writeout_type(ty)
         self.write(' ')
-        self.write(name)
+        self.writeout_value(name)
 
     def writeout_arg_list(self, args):
         self.writeout_csl(args, self.writeout_arg)
@@ -123,6 +133,7 @@ class LLVMWriter:
                 self.writeout_arg_list(terminator.args)
                 self.write(")\n  ret void\n")
             else:
+                raise NotImplementedError()
                 self.write("  %$tail_output = tail call ")
                 self.writeout_type(terminator.ret_type)
                 self.write(" ")
@@ -132,15 +143,20 @@ class LLVMWriter:
                 self.write(")\n  ret %$tail_output\n")
         elif terminator.tag == 'return':
             self.write("  ret ")
-            self.write(terminator.value)
-            self.write("\n")
+            if terminator.ty.tag == 'void':
+                self.write('void\n')
+            else:
+                self.writeout_type(terminator.ty)
+                self.write(' ')
+                self.writeout_value(terminator.value)
+                self.write("\n")
         elif terminator.tag == 'unconditional_branch':
             self.write("  br label %")
             self.write(terminator.to)
             self.write("\n")
         elif terminator.tag == 'conditional_branch':
             self.write("  br i1 ")
-            self.write(terminator.condition)
+            self.writeout_value(terminator.condition)
             self.write(", label %")
             self.write(terminator.true_block)
             self.write(", label %")
@@ -154,20 +170,20 @@ class LLVMWriter:
         if instruction.tag == 'bitcast':
             self.write(instruction.dst)
             self.write(" = bitcast ")
-            self.writeout_type(instruction.source_type)
+            self.writeout_type(instruction.from_ty)
             self.write(" ")
-            self.write(instruction.value)
+            self.writeout_value(instruction.value)
             self.write(" to ")
-            self.writeout_type(instruction.dest_type)
+            self.writeout_type(instruction.to_ty)
         elif instruction.tag == 'store':
             self.write("store ")
             self.writeout_type(instruction.ty)
             self.write(" ")
-            self.write(instruction.source)
+            self.writeout_value(instruction.source)
             self.write(", ")
             self.writeout_type(new_code_generator.ptr_to(instruction.ty))
             self.write(" ")
-            self.write(instruction.dst)
+            self.writeout_value(instruction.dst)
             self.write(', align 1')
         elif instruction.tag == 'getelementptr':
             self.write(instruction.dst)
@@ -177,18 +193,18 @@ class LLVMWriter:
             self.write(", ")
             self.writeout_type(instruction.source_type)
             self.write(" ")
-            self.write(instruction.value)
+            self.writeout_value(instruction.value)
             for off in instruction.offset:
                 self.write(", i64 ")
-                self.write(off)
+                self.writeout_value(off)
         elif instruction.tag == 'add':
             self.write(instruction.dst)
             self.write(" = add ")
             self.writeout_type(instruction.ty)
             self.write(" ")
-            self.write(instruction.a)
+            self.writeout_value(instruction.a)
             self.write(", ")
-            self.write(instruction.b)
+            self.writeout_value(instruction.b)
         elif instruction.tag == 'load':
             self.write(instruction.dst)
             self.write(" = load ")
@@ -196,20 +212,20 @@ class LLVMWriter:
             self.write(", ")
             self.writeout_type(new_code_generator.ptr_to(instruction.ty))
             self.write(" ")
-            self.write(instruction.source)
+            self.writeout_value(instruction.source)
             self.write(', align 1')
         elif instruction.tag == 'select':
             self.write(instruction.dst)
             self.write(" = select i1 ")
-            self.write(instruction.condition)
+            self.writeout_value(instruction.condition)
             self.write(", ")
             self.writeout_type(instruction.type)
             self.write(" ")
-            self.write(instruction.true_value)
+            self.writeout_value(instruction.true_value)
             self.write(", ")
             self.writeout_type(instruction.type)
             self.write(" ")
-            self.write(instruction.false_value)
+            self.writeout_value(instruction.false_value)
         elif instruction.tag == 'call':
             if instruction.return_type.tag == 'void':
                 self.write("call ")
@@ -218,7 +234,7 @@ class LLVMWriter:
                 self.write(" = call ")
             self.writeout_type(instruction.return_type)
             self.write(" ")
-            self.write(instruction.function)
+            self.writeout_value(instruction.function)
             self.write("(")
             self.writeout_arg_list(instruction.args)
             self.write(")")
@@ -231,7 +247,7 @@ class LLVMWriter:
             self.write(" = zext ")
             self.writeout_type(instruction.from_ty)
             self.write(" ")
-            self.write(instruction.value)
+            self.writeout_value(instruction.value)
             self.write(" to ")
             self.writeout_type(instruction.to_ty)
         elif instruction.tag == 'sext':
@@ -239,7 +255,7 @@ class LLVMWriter:
             self.write(" = sext ")
             self.writeout_type(instruction.from_ty)
             self.write(" ")
-            self.write(instruction.value)
+            self.writeout_value(instruction.value)
             self.write(" to ")
             self.writeout_type(instruction.to_ty)
         elif instruction.tag == 'truncate':
@@ -247,9 +263,19 @@ class LLVMWriter:
             self.write(" = trunc ")
             self.writeout_type(instruction.from_ty)
             self.write(" ")
-            self.write(instruction.value)
+            self.writeout_value(instruction.value)
             self.write(" to ")
             self.writeout_type(instruction.to_ty)
+        elif instruction.tag == 'icmp':
+            self.write(instruction.dst)
+            self.write(" = icmp ")
+            self.write(instruction.mode)
+            self.write(" ")
+            self.writeout_type(instruction.ty)
+            self.write(" ")
+            self.writeout_value(instruction.a)
+            self.write(", ")
+            self.writeout_value(instruction.b)
         else:
             print(instruction.tag)
             raise NotImplementedError()
@@ -257,11 +283,9 @@ class LLVMWriter:
 
     def writeout_global(self, decl):
         self.write(decl.name)
-        self.write(" = constant ")
+        self.write(" = global ")
         self.writeout_type(decl.ty)
-        self.write(" ")
-        self.write(decl.value)
-        self.write('\n')
+        self.write(' 0\n')
 
     def writeout_global_constructors(self, decl):
         self.write("@llvm.global_ctors = appending global [")
@@ -273,7 +297,7 @@ class LLVMWriter:
                 self.write(", ")
             first = False
             self.write("%$constructor { i32 65535, void ()* ")
-            self.write(func)
+            self.writeout_value(func)
             self.write(", i8* null }")
         self.write("]\n")
 

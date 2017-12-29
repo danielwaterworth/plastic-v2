@@ -41,6 +41,8 @@ special_symbols = {
     '@': 'at',
     ':': 'colon',
     ';': 'semicolon',
+    '&': 'ampersand',
+    '*': 'asterisk',
 }
 
 class Lexer:

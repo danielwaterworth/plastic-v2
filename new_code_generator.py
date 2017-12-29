@@ -239,6 +239,33 @@ class FunctionWriter:
         )
         return dst
 
+    def bitcast(self, from_ty, to_ty, value):
+        dst = next(self.variable_names)
+        self.current_basic_block.instructions.append(
+            CGASTNode(
+                'bitcast',
+                dst = dst,
+                from_ty = from_ty,
+                to_ty = to_ty,
+                value = value,
+            )
+        )
+        return dst
+
+    def icmp(self, mode, ty, a, b):
+        dst = next(self.variable_names)
+        self.current_basic_block.instructions.append(
+            CGASTNode(
+                'icmp',
+                dst = dst,
+                mode = mode,
+                ty = ty,
+                a = a,
+                b = b,
+            )
+        )
+        return dst
+
     def global_string_constant(self, string):
         return self.code_generator.global_string_constant(string)
 
@@ -255,6 +282,8 @@ class FunctionWriter:
             return boolean, '1'
         elif expr.name == 'false':
             return boolean, '0'
+        elif expr.name == 'null':
+            return byte_ptr, 'null'
         elif expr.name in self.code_generator.functions:
             return self.code_generator.functions[expr.name]
         elif expr.name in self.scope:
@@ -263,6 +292,15 @@ class FunctionWriter:
         elif expr.name in self.code_generator.constants:
             ty, ptr = self.code_generator.constants[expr.name]
             return ty, self.load(ty, ptr)
+        raise NotImplementedError()
+
+    def generate_variable_l(self, expr):
+        if expr.name in self.scope:
+            ty, ptr = self.scope[expr.name]
+            return ptr_to(ty), ptr
+        elif expr.name in self.code_generator.constants:
+            ty, ptr = self.code_generator.constants[expr.name]
+            return ptr_to(ty), ptr
         raise NotImplementedError()
 
     def generate_application(self, expr):
@@ -283,20 +321,28 @@ class FunctionWriter:
     def generate_cast(self, expr):
         from_ty, value = self.generate_expression(expr.expr)
         to_ty = self.generate_type(expr.ty)
-        assert from_ty.tag == 'number'
-        assert to_ty.tag == 'number'
-        if from_ty.width == to_ty.width:
-            return to_ty, value
-        elif from_ty.width > to_ty.width:
-            return to_ty, self.truncate(from_ty, to_ty, value)
-        else:
-            if expr.ty.signed:
-                return to_ty, self.sext(from_ty, to_ty, value)
+        if from_ty.tag == 'number':
+            assert to_ty.tag == 'number'
+            if from_ty.width == to_ty.width:
+                return to_ty, value
+            elif from_ty.width > to_ty.width:
+                return to_ty, self.truncate(from_ty, to_ty, value)
             else:
-                return to_ty, self.zext(from_ty, to_ty, value)
+                if expr.ty.signed:
+                    return to_ty, self.sext(from_ty, to_ty, value)
+                else:
+                    return to_ty, self.zext(from_ty, to_ty, value)
+        else:
+            assert from_ty.tag == 'ptr_to'
+            return to_ty, self.bitcast(from_ty, to_ty, value)
 
     def generate_eq(self, expr):
-        raise NotImplementedError()
+        a_ty, a = self.generate_expression(expr.a)
+        b_ty, b = self.generate_expression(expr.b)
+        if a_ty.tag == 'number':
+            return boolean, self.icmp('eq', a_ty, a, b)
+        else:
+            raise NotImplementedError()
 
     def generate_plus(self, expr):
         ty, a = self.generate_expression(expr.a)
@@ -318,6 +364,9 @@ class FunctionWriter:
 
     def generate_apply_type_args(self, expr):
         raise NotImplementedError()
+
+    def generate_address_of(self, expr):
+        return self.generate_l_expr(expr.expr)
 
     def generate_expression(self, expr):
         if expr.tag == 'variable':
@@ -344,6 +393,8 @@ class FunctionWriter:
             output = self.generate_string_literal(expr)
         elif expr.tag == 'apply_type_args':
             output = self.generate_apply_type_args(expr)
+        elif expr.tag == 'address_of':
+            output = self.generate_address_of(expr)
         else:
             raise NotImplementedError()
         assert type(output) == tuple, expr.tag
@@ -352,6 +403,19 @@ class FunctionWriter:
 
     def generate_expressions(self, exprs):
         return [self.generate_expression(expr) for expr in exprs]
+
+    def generate_l_expr(self, expr):
+        if expr.tag == 'variable':
+            output = self.generate_variable_l(expr)
+        elif expr.tag == 'field_access':
+            output = self.generate_field_access_l(expr)
+        elif expr.tag == 'string_literal':
+            output = self.generate_string_literal_l(expr)
+        else:
+            raise NotImplementedError()
+        assert type(output) == tuple, expr.tag
+        assert len(output) == 2, expr.tag
+        return output
 
     def generate_allocations(self, statement):
         if statement.tag == 'let_statement':
@@ -419,14 +483,16 @@ class FunctionWriter:
         self.scope = dict(scope)
         self.current_basic_block = true_block
         self.generate_statements(statement.true_side)
-        self.current_basic_block.terminator = \
-            unconditional_branch(after_block.label)
+        if self.current_basic_block:
+            self.current_basic_block.terminator = \
+                unconditional_branch(after_block.label)
 
         self.scope = dict(scope)
         self.current_basic_block = false_block
         self.generate_statements(statement.false_side)
-        self.current_basic_block.terminator = \
-            unconditional_branch(after_block.label)
+        if self.current_basic_block:
+            self.current_basic_block.terminator = \
+                unconditional_branch(after_block.label)
 
         self.scope = dict(scope)
         self.current_basic_block = after_block
@@ -471,7 +537,7 @@ class CodeGenerator:
         self.strings = []
         self.functions = {}
         self.constants = {}
-        self.constructors = []
+        self.initializers = []
 
     def global_string_constant(self, string):
         value = next(self.string_names)
@@ -528,12 +594,32 @@ class CodeGenerator:
     def generate_struct(self, decl):
         fields = \
             [(name, self.generate_type(ty)) for name, ty in decl.fields]
+
+        return_type = named_type(decl.name)
+
+        arg_names = ['%' + name for name, _ in fields]
+        arg_types = [ty for _, ty in fields]
+        self.functions[decl.name] = \
+            ptr_to(func(arg_types, return_type)), '@' + decl.name
+        function_writer = FunctionWriter(self)
+        output_ptr = function_writer.alloca(return_type)
+        output = function_writer.load(return_type, output_ptr)
+        function_writer.current_basic_block.terminator = \
+            return_(return_type, output)
         return [
             CGASTNode(
                 'struct',
                 name = decl.name,
                 fields = [ty for _, ty in fields],
-            )
+            ),
+            CGASTNode(
+                'define',
+                name = '@' + decl.name,
+                return_type = return_type,
+                args = list(zip(arg_types, arg_names)),
+                basic_blocks = function_writer.basic_blocks,
+                linkage = [],
+            ),
         ]
 
     def generate_enum(self, decl):
@@ -577,17 +663,16 @@ class CodeGenerator:
         function_writer.current_basic_block.terminator = return_(void, 'void')
         function_writer.store('@' + decl.name, ty, value)
         self.constants[decl.name] = ty, '@' + decl.name
-        self.constructors.append(function_name)
+        self.initializers.append(function_name)
         return [
             CGASTNode(
                 'global',
                 name = '@' + decl.name,
                 ty = ty,
-                value = 'undef',
             ),
             CGASTNode(
                 'define',
-                linkage = ['private'],
+                linkage = [],
                 name = function_name,
                 args = [],
                 basic_blocks = function_writer.basic_blocks,
@@ -612,7 +697,7 @@ class CodeGenerator:
         constructors = [
             CGASTNode(
                 'global_constructors',
-                funcs = self.constructors
+                funcs = self.initializers,
             ),
         ]
         llvm_decls = concat([self.generate_decl(decl) for decl in decls])

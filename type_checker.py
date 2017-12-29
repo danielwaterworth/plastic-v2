@@ -341,15 +341,27 @@ class Environment:
             arg_types = [arg.ty for arg in args]
             if type(function.ty) != FunctionType:
                 raise TypeError()
-            if not list_substitutable_for(arg_types, function.ty.arg_types):
-                print(arg_types)
-                print(function.ty.arg_types)
+            if not len(arg_types) == len(function.ty.arg_types):
                 raise TypeError()
+            new_args = []
+            for actual, expected, value in zip(arg_types, function.ty.arg_types, args):
+                if not actual.substitutable_for(expected):
+                    raise TypeError()
+                if actual == expected:
+                    new_args.append(value)
+                else:
+                    new_args.append(
+                        TypedASTNode(
+                            'cast',
+                            expr = value,
+                            ty = expected,
+                        )
+                    )
             return \
                 TypedASTNode(
                     'application',
                     function = function,
-                    args = args,
+                    args = new_args,
                     ty = function.ty.return_type,
                 )
         elif expr.tag == 'variable':
@@ -467,7 +479,14 @@ class Environment:
                     ty = new_type,
                 )
             raise NotImplementedError()
-
+        elif expr.tag == 'address_of':
+            expr = self.check_expression(expr.expr)
+            return \
+                TypedASTNode(
+                    'address_of',
+                    expr = expr,
+                    ty = ptr_to(expr.ty),
+                )
         print(expr.tag)
         raise NotImplementedError()
 
@@ -476,13 +495,27 @@ class Environment:
 
     def check_let(self, statement):
         expr = self.check_expression(statement.expr)
+        if statement.ty:
+            ty = self.check_type(statement.ty)
+            if not expr.ty.substitutable_for(ty):
+                raise ParseError()
+            if expr.ty != ty:
+                expr = \
+                    TypedASTNode(
+                        'cast',
+                        expr = expr,
+                        ty = ty,
+                    )
+        else:
+            ty = expr.ty
         statement = \
             TypedASTNode(
                 'let_statement',
                 expr = expr,
-                name = statement.name
+                name = statement.name,
+                ty = ty,
             )
-        new_env = Environment({}, {statement.name: expr.ty}, self)
+        new_env = Environment({}, {statement.name: ty}, self)
         return statement, new_env
 
     def check_loop(self, statement):
@@ -530,12 +563,21 @@ class Environment:
                 statement = TypedASTNode('break')
                 new_env = self
             elif first_statement.tag == 'assignment':
-                expr = self.check_expression(first_statement.expr)
                 l_expr = self.check_l_expression(first_statement.l_expr)
+                expr = self.check_expression(first_statement.expr)
                 compatible = \
                     expr.ty.substitutable_for(l_expr.ty)
+                equal = \
+                    expr.ty == l_expr.ty
                 if not compatible:
                     raise TypeError()
+                if not equal:
+                    expr = \
+                        TypedASTNode(
+                            'cast',
+                            expr = expr,
+                            ty = l_expr.ty,
+                        )
                 statement = \
                     TypedASTNode(
                         'assignment',
