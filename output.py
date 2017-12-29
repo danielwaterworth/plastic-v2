@@ -189,13 +189,13 @@ class LLVMWriter:
             self.write(instruction.dst)
             self.write(" = getelementptr ")
             assert instruction.source_type.tag == 'ptr_to'
-            self.writeout_type(instruction.source_type.ty)
+            self.writeout_type(instruction.dst_type)
             self.write(", ")
             self.writeout_type(instruction.source_type)
             self.write(" ")
             self.writeout_value(instruction.value)
             for off in instruction.offset:
-                self.write(", i64 ")
+                self.write(", i32 ")
                 self.writeout_value(off)
         elif instruction.tag == 'add':
             self.write(instruction.dst)

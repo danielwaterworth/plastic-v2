@@ -187,12 +187,13 @@ class FunctionWriter:
         )
         return dst
 
-    def getelementptr(self, ty, value, offset):
+    def getelementptr(self, dst_type, source_type, value, offset):
         dst = next(self.variable_names)
         self.current_basic_block.instructions.append(
             CGASTNode(
                 'getelementptr',
-                source_type = ptr_to(ty),
+                source_type = source_type,
+                dst_type = dst_type,
                 value = value,
                 offset = offset,
                 dst = dst,
@@ -360,7 +361,7 @@ class FunctionWriter:
 
     def generate_string_literal(self, expr):
         ty, value = self.global_string_constant(expr.string)
-        return byte_ptr, self.getelementptr(ty, value, ["0", "0"])
+        return byte_ptr, self.getelementptr(ty, ptr_to(ty), value, ["0", "0"])
 
     def generate_apply_type_args(self, expr):
         raise NotImplementedError()
@@ -601,11 +602,22 @@ class CodeGenerator:
         arg_types = [ty for _, ty in fields]
         self.functions[decl.name] = \
             ptr_to(func(arg_types, return_type)), '@' + decl.name
+
         function_writer = FunctionWriter(self)
         output_ptr = function_writer.alloca(return_type)
+        for i, name, ty in zip(itertools.count(), arg_names, arg_types):
+            field_ptr = \
+                function_writer.getelementptr(
+                    return_type,
+                    ptr_to(return_type),
+                    output_ptr,
+                    ['0', str(i)]
+                )
+            function_writer.store(field_ptr, ty, name)
         output = function_writer.load(return_type, output_ptr)
         function_writer.current_basic_block.terminator = \
             return_(return_type, output)
+
         return [
             CGASTNode(
                 'struct',
