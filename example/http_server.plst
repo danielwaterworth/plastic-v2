@@ -41,13 +41,13 @@ extern
       u32,
       u32,
     ->
-      u32
+      i32
 
 extern
   bind
     <-
-      u32,
-      ptr(i8),
+      i32,
+      ptr(sockaddr),
       ptr(u32),
     ->
       u32
@@ -59,6 +59,14 @@ extern
       ptr(i8),
       ptr(addrinfo),
       ptr(ptr(addrinfo)),
+    ->
+      i32
+
+extern
+  listen
+    <-
+      i32,
+      i32,
     ->
       i32
 
@@ -82,6 +90,13 @@ extern
   putchar
     <-
       u32,
+    ->
+      void
+
+extern
+  putint
+    <-
+      i32,
     ->
       void
 
@@ -117,31 +132,40 @@ define
       let hints =
         addrinfo(
           ai_passive,
-          0,
-          0,
+          af_inet,
+          sock_stream,
           0,
           0,
           null,
           null,
           null,
         );
-      if (getaddrinfo(null, "5000\00", &hints, &addr) == 0) {
-        puts("success\00");
-        if (null == addr) {
-          puts("what\00");
-        } else {
-          puts("yay\00");
-        }
-        return void;
-      } else {
-        puts("fail\00");
+      puts("getaddrinfo\00");
+      if (getaddrinfo(null, "5000\00", &hints, &addr) != 0) {
         return void;
       }
-      # if (bind(accept_sock, ) == 0) {
-      #   return void;
-      # } else {
+
+      puts("socket\00");
+      let accept_sock = socket(af_inet, sock_stream, default_protocol);
+      if (accept_sock < 0) {
+        return void;
+      }
+
+      puts("bind\00");
+      if (bind(accept_sock, (*addr).ai_addr, &(*addr).ai_addrlen) != 0) {
+        return void;
+      }
+
+      # puts("listen\00");
+      # if (listen(accept_sock, 1024) != 0) {
       #   return void;
       # }
+
+      # loop {
+      #   let client_sock = accept(accept_sock);
+      # }
+
+      return void;
     }
 
 # define

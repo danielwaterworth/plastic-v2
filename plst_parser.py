@@ -228,8 +228,20 @@ class Parser:
         else:
             return self.parse_expression_1()
 
+    def parse_expression_3(self):
+        if self.next.tag == 'asterisk':
+            self.advance()
+            expr = self.parse_expression_3()
+            return \
+                ASTNode(
+                    'deref',
+                    expr = expr,
+                )
+        else:
+            return self.parse_expression_2()
+
     def parse_expression_4(self):
-        expr = self.parse_expression_2()
+        expr = self.parse_expression_3()
         while not self.eof():
             self.save()
             try:
@@ -278,6 +290,22 @@ class Parser:
                     self.discard()
                     other = self.parse_expression_5()
                     expr = ASTNode('==', a = expr, b = other)
+                elif symbol == '<':
+                    self.discard()
+                    other = self.parse_expression_5()
+                    expr = ASTNode('<', a = expr, b = other)
+                elif symbol == '>':
+                    self.discard()
+                    other = self.parse_expression_5()
+                    expr = ASTNode('>', a = expr, b = other)
+                elif symbol == '!=':
+                    self.discard()
+                    other = self.parse_expression_5()
+                    expr = \
+                        ASTNode(
+                            'not',
+                            expr = ASTNode('==', a = expr, b = other),
+                        )
                 else:
                     self.restore()
                     break
@@ -308,14 +336,17 @@ class Parser:
         body = self.parse_body()
         return ASTNode('loop_statement', body = body)
 
+    def parse_else(self):
+        self.expect_keyword('else')
+        self.expect('open_brace')
+        false_side = self.parse_body()
+
     def parse_if_statement(self):
         self.expect_keyword('if')
         condition = self.parse_expression()
         self.expect('open_brace')
         true_side = self.parse_body()
-        self.expect_keyword('else')
-        self.expect('open_brace')
-        false_side = self.parse_body()
+        false_side = self.try_(self.parse_else) or []
 
         return \
             ASTNode(
@@ -333,7 +364,19 @@ class Parser:
         return ASTNode('assignment', l_expr = l_expr, expr = expr)
 
     def parse_l_expr(self):
-        return self.parse_l_expr_1()
+        return self.parse_l_expr_2()
+
+    def parse_l_expr_2(self):
+        if self.next.tag == 'asterisk':
+            self.advance()
+            expr = self.parse_expression()
+            return \
+                ASTNode(
+                    'deref',
+                    expr = expr,
+                )
+        else:
+            return self.parse_l_expr_1()
 
     def parse_l_expr_1(self):
         l_expr = self.parse_l_expr_0()

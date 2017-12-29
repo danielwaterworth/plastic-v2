@@ -1,3 +1,5 @@
+from constants import *
+
 class Kind:
     pass
 
@@ -82,6 +84,8 @@ class Boolean(TypeLevelExpr):
 
     def __eq__(self, other):
         return type(other) == Boolean
+
+boolean = Boolean()
 
 class NumberType(TypeLevelExpr):
     kind = star
@@ -346,6 +350,7 @@ class Environment:
             new_args = []
             for actual, expected, value in zip(arg_types, function.ty.arg_types, args):
                 if not actual.substitutable_for(expected):
+                    print(actual, expected)
                     raise TypeError()
                 if actual == expected:
                     new_args.append(value)
@@ -414,7 +419,7 @@ class Environment:
                     n = ord(expr.character),
                     ty = NumberType(False, 8),
                 )
-        elif expr.tag == '==':
+        elif expr.tag in comparison_operators:
             a = self.check_expression(expr.a)
             b = self.check_expression(expr.b)
             if a.ty == b.ty:
@@ -437,10 +442,10 @@ class Environment:
                 raise TypeError()
             return \
                 TypedASTNode(
-                    '==',
+                    expr.tag,
                     a = a,
                     b = b,
-                    ty = Boolean(),
+                    ty = boolean,
                 )
         elif expr.tag == '+':
             a = self.check_expression(expr.a)
@@ -498,12 +503,32 @@ class Environment:
                 )
             raise NotImplementedError()
         elif expr.tag == 'address_of':
-            expr = self.check_expression(expr.expr)
+            expr = self.check_l_expression(expr.expr)
             return \
                 TypedASTNode(
                     'address_of',
                     expr = expr,
                     ty = ptr_to(expr.ty),
+                )
+        elif expr.tag == 'deref':
+            expr = self.check_expression(expr.expr)
+            if not is_ptr(expr.ty):
+                raise TypeError()
+            return \
+                TypedASTNode(
+                    'deref',
+                    expr = expr,
+                    ty = expr.ty.args[0],
+                )
+        elif expr.tag == 'not':
+            expr = self.check_expression(expr.expr)
+            if type(expr.ty) != Boolean:
+                raise TypeError()
+            return \
+                TypedASTNode(
+                    'not',
+                    expr = expr,
+                    ty = boolean,
                 )
         print(expr.tag)
         raise NotImplementedError()
@@ -642,6 +667,16 @@ class Environment:
                     field = l_expr.field,
                     ty = field_ty,
                 )
+        elif l_expr.tag == 'deref':
+            expr = self.check_expression(l_expr.expr)
+            if not is_ptr(expr.ty):
+                raise TypeError()
+            return \
+                TypedASTNode(
+                    'deref',
+                    expr = expr,
+                    ty = expr.ty.args[0],
+                )
         else:
             raise NotImplementedError()
 
@@ -730,14 +765,14 @@ global_type_environment = {
     'i32': NumberType(True, 32),
     'u32': NumberType(False, 32),
     'u64': NumberType(False, 64),
-    'bool': Boolean(),
+    'bool': boolean,
 }
 
 global_term_environment = {
     'null': OpaquePtr(),
     'void': void,
-    'true': Boolean(),
-    'false': Boolean(),
+    'true': boolean,
+    'false': boolean,
     'resume':
         LambdaType(
             ['a', 'b', 'c'],

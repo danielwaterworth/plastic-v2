@@ -276,6 +276,19 @@ class LLVMWriter:
             self.writeout_value(instruction.a)
             self.write(", ")
             self.writeout_value(instruction.b)
+        elif instruction.tag == 'extractvalue':
+            self.write(instruction.dst)
+            self.write(" = extractvalue ")
+            self.writeout_type(instruction.ty)
+            self.write(" ")
+            self.writeout_value(instruction.value)
+            for index in instruction.indices:
+                self.write(", ")
+                self.write(str(index))
+        elif instruction.tag == 'not':
+            self.write(instruction.dst)
+            self.write(" = sub i1 1, ")
+            self.write(instruction.value)
         else:
             print(instruction.tag)
             raise NotImplementedError()

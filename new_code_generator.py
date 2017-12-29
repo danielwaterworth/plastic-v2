@@ -1,5 +1,6 @@
 import itertools
 import type_checker
+from constants import *
 
 class CGASTNode:
     def __init__(self, tag, **kwargs):
@@ -267,6 +268,30 @@ class FunctionWriter:
         )
         return dst
 
+    def extractvalue(self, ty, value, indices):
+        dst = next(self.variable_names)
+        self.current_basic_block.instructions.append(
+            CGASTNode(
+                'extractvalue',
+                dst = dst,
+                ty = ty,
+                value = value,
+                indices = indices,
+            )
+        )
+        return dst
+
+    def not_(self, value):
+        dst = next(self.variable_names)
+        self.current_basic_block.instructions.append(
+            CGASTNode(
+                'not',
+                dst = dst,
+                value = value,
+            )
+        )
+        return dst
+
     def global_string_constant(self, string):
         return self.code_generator.global_string_constant(string)
 
@@ -304,6 +329,12 @@ class FunctionWriter:
             return ptr_to(ty), ptr
         raise NotImplementedError()
 
+    def generate_field_access_l(self, expr):
+        struct_ty, ptr = self.generate_l_expr(expr.l_expr)
+        field = expr.field
+        index, field_ty = self.code_generator.structs[struct_ty.ty.name][field]
+        return field_ty, self.getelementptr(struct_ty.ty, struct_ty, ptr, ['0', str(index)])
+
     def generate_application(self, expr):
         ty, function = self.generate_expression(expr.function)
         args = self.generate_expressions(expr.args)
@@ -314,7 +345,10 @@ class FunctionWriter:
         raise NotImplementedError()
 
     def generate_field_access(self, expr):
-        raise NotImplementedError()
+        struct_ty, value = self.generate_expression(expr.x)
+        field = expr.field
+        index, field_ty = self.code_generator.structs[struct_ty.name][field]
+        return field_ty, self.extractvalue(struct_ty, value, [index])
 
     def generate_character_literal(self, expr):
         raise NotImplementedError()
@@ -337,11 +371,16 @@ class FunctionWriter:
             assert from_ty.tag == 'ptr_to'
             return to_ty, self.bitcast(from_ty, to_ty, value)
 
-    def generate_eq(self, expr):
+    def generate_comparison(self, expr):
+        ops = {
+            '==': 'eq',
+            '<': 'ult',
+            '>': 'ugt',
+        }
         a_ty, a = self.generate_expression(expr.a)
         b_ty, b = self.generate_expression(expr.b)
         if a_ty.tag == 'number' or a_ty.tag == 'ptr_to':
-            return boolean, self.icmp('eq', a_ty, a, b)
+            return boolean, self.icmp(ops[expr.tag], a_ty, a, b)
         else:
             raise NotImplementedError()
 
@@ -382,8 +421,8 @@ class FunctionWriter:
             output = self.generate_character_literal(expr)
         elif expr.tag == 'cast':
             output = self.generate_cast(expr)
-        elif expr.tag == '==':
-            output = self.generate_eq(expr)
+        elif expr.tag in comparison_operators:
+            output = self.generate_comparison(expr)
         elif expr.tag == '+':
             output = self.generate_plus(expr)
         elif expr.tag == '-':
@@ -396,6 +435,13 @@ class FunctionWriter:
             output = self.generate_apply_type_args(expr)
         elif expr.tag == 'address_of':
             output = self.generate_address_of(expr)
+        elif expr.tag == 'deref':
+            ty, ptr = self.generate_expression(expr.expr)
+            assert ty.tag == 'ptr_to'
+            return ty.ty, self.load(ty.ty, ptr)
+        elif expr.tag == 'not':
+            ty, value = self.generate_expression(expr.expr)
+            return ty, self.not_(value)
         else:
             raise NotImplementedError()
         assert type(output) == tuple, expr.tag
@@ -412,6 +458,8 @@ class FunctionWriter:
             output = self.generate_field_access_l(expr)
         elif expr.tag == 'string_literal':
             output = self.generate_string_literal_l(expr)
+        elif expr.tag == 'deref':
+            output = self.generate_expression(expr.expr)
         else:
             raise NotImplementedError()
         assert type(output) == tuple, expr.tag
@@ -539,6 +587,7 @@ class CodeGenerator:
         self.functions = {}
         self.constants = {}
         self.initializers = []
+        self.structs = {}
 
     def global_string_constant(self, string):
         value = next(self.string_names)
@@ -598,13 +647,19 @@ class CodeGenerator:
 
         return_type = named_type(decl.name)
 
-        arg_names = ['%' + name for name, _ in fields]
+        names = [name for name, _ in fields]
         arg_types = [ty for _, ty in fields]
+        arg_names = ['%' + name for name, _ in fields]
+
         self.functions[decl.name] = \
             ptr_to(func(arg_types, return_type)), '@' + decl.name
 
         function_writer = FunctionWriter(self)
         output_ptr = function_writer.alloca(return_type)
+        self.structs[decl.name] = {}
+        for i, name, ty in zip(itertools.count(), names, arg_types):
+            self.structs[decl.name][name] = (i, ty)
+
         for i, name, ty in zip(itertools.count(), arg_names, arg_types):
             field_ptr = \
                 function_writer.getelementptr(

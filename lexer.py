@@ -11,7 +11,7 @@ class Token:
     def __repr__(self):
         return "Token(%s, %s)" % (repr(self.tag), repr(self.attributes))
 
-symbol_chars = '<>+-='
+symbol_chars = '!<>+-='
 
 keywords = {
     'as',
