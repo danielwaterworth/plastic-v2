@@ -127,7 +127,7 @@ define
         );
       if (getaddrinfo(null, "5000\00", &hints, &addr) == 0) {
         puts("success\00");
-        if (addr == null as ptr(addrinfo)) {
+        if (null == addr) {
           puts("what\00");
         } else {
           puts("yay\00");

@@ -417,10 +417,23 @@ class Environment:
         elif expr.tag == '==':
             a = self.check_expression(expr.a)
             b = self.check_expression(expr.b)
-            compatible = \
-                a.ty.substitutable_for(b.ty) or \
-                b.ty.substitutable_for(a.ty)
-            if not compatible:
+            if a.ty == b.ty:
+                pass
+            if a.ty.substitutable_for(b.ty):
+                a = \
+                    TypedASTNode(
+                        'cast',
+                        expr = a,
+                        ty = b.ty,
+                    )
+            elif b.ty.substitutable_for(a.ty):
+                b = \
+                    TypedASTNode(
+                        'cast',
+                        expr = b,
+                        ty = a.ty,
+                    )
+            else:
                 raise TypeError()
             return \
                 TypedASTNode(
