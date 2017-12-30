@@ -261,7 +261,7 @@ class Parser:
                 self.advance()
                 other = self.parse_expression_4()
                 expr = ASTNode('*', a = expr, b = other)
-            elif self.next.tag == 'symbol' and self.next.tag.symbol == '/':
+            elif self.next.tag == 'symbol' and self.next.symbol == '/':
                 self.advance()
                 other = self.parse_expression_4()
                 expr = ASTNode('/', a = expr, b = other)
