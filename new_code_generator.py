@@ -317,6 +317,9 @@ class FunctionWriter:
         elif expr.name in self.code_generator.constants:
             ty, ptr = self.code_generator.constants[expr.name]
             return ty, self.load(ty, ptr)
+        elif expr.name in self.arg_dict:
+            ty, ptr = self.arg_dict[expr.name]
+            return ty, self.load(ty, ptr)
         raise NotImplementedError()
 
     def generate_variable_l(self, expr):
@@ -713,13 +716,17 @@ class CodeGenerator:
         function_writer = FunctionWriter(self)
         args = []
         arg_types = []
+        arg_dict = {}
         for arg_name, arg_type in decl.args:
             llvm_name = '%' + arg_name
             llvm_type = self.generate_type(arg_type)
             arg_ptr = function_writer.alloca(llvm_type)
             function_writer.store(arg_ptr, llvm_type, llvm_name)
-            args.append((llvm_name, llvm_type))
+            args.append((llvm_type, llvm_name))
             arg_types.append(llvm_type)
+            arg_dict[arg_name] = llvm_type, arg_ptr
+
+        function_writer.arg_dict = arg_dict
 
         for statement in decl.body:
             function_writer.generate_allocations(statement)
