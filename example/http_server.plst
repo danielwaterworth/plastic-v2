@@ -172,7 +172,7 @@ enum
     part(partial_http_result_t),
 
 define
-  initialize
+  initialize_accept_socket
     ->
       i32
     = {
@@ -225,24 +225,48 @@ define
   main_loop
     <-
       accept_sock: i32,
+      epoll_sock: i32,
     ->
       void
     = {
       loop {
-        let client_sock = accept(accept_sock, null, null);
-        puts("new connection\00");
+        let events: array(epoll_event, 1024);
+        let num_ready = epoll_wait(epoll_sock, &events[0], 1000, -1);
+        if (num_ready < 0) {
+          puts("problem\00");
+          return void;
+        }
+
+        let i = 0;
+        loop {
+          if (i >= num_ready) {
+            break;
+          }
+          let event = events[i];
+          i = i + 1;
+
+          event.events;
+          event.data;
+        }
       }
     }
 
 define
   main
     = {
-      let accept_sock = initialize();
+      let accept_sock = initialize_accept_socket();
       if (accept_sock < 0) {
         return void;
       }
 
-      main_loop(accept_sock);
+      let epoll_sock = epoll_create1(0);
+      if (epoll_sock < 0) {
+        return void;
+      }
+
+      # epoll_ctl(epoll_sock, epoll_ctl_add, accept_sock, 
+
+      main_loop(accept_sock, epoll_sock);
       return void;
     }
 

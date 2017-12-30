@@ -485,7 +485,7 @@ class FunctionWriter:
 
     def generate_allocations(self, statement):
         if statement.tag == 'let_statement':
-            llvm_type = self.generate_type(statement.expr.ty)
+            llvm_type = self.generate_type(statement.ty)
             self.let_allocations[id(statement)] = self.alloca(llvm_type)
         elif statement.tag == 'if_statement':
             for s in statement.true_side:
@@ -497,10 +497,12 @@ class FunctionWriter:
                 self.generate_allocations(statement)
 
     def generate_let_statement(self, statement):
-        ty, value = self.generate_expression(statement.expr)
+        ty = self.generate_type(statement.ty)
         ptr = self.let_allocations[id(statement)]
         self.scope[statement.name] = ty, ptr
-        self.store(ptr, ty, value)
+        if statement.expr:
+            _, value = self.generate_expression(statement.expr)
+            self.store(ptr, ty, value)
 
     def generate_loop_statement(self, statement):
         scope = dict(self.scope)

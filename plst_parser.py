@@ -294,9 +294,13 @@ class Parser:
             ty = self.parse_type()
         else:
             ty = None
-        self.expect_symbol('=')
-        expr = self.parse_expression()
-        self.expect('semicolon')
+        if self.next.tag == 'semicolon':
+            self.advance()
+            expr = None
+        else:
+            self.expect_symbol('=')
+            expr = self.parse_expression()
+            self.expect('semicolon')
         return ASTNode('let_statement', name = name, expr = expr, ty = ty)
 
     def parse_loop_statement(self):

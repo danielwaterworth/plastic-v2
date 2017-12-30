@@ -575,19 +575,25 @@ class Environment:
         return [self.check_expression(expr) for expr in exprs]
 
     def check_let(self, statement):
-        expr = self.check_expression(statement.expr)
+        if statement.expr is None:
+            expr = None
+        else:
+            expr = self.check_expression(statement.expr)
         if statement.ty:
             ty = self.check_type(statement.ty)
-            if not expr.ty.substitutable_for(ty):
-                raise ParseError()
-            if expr.ty != ty:
-                expr = \
-                    TypedASTNode(
-                        'cast',
-                        expr = expr,
-                        ty = ty,
-                    )
+            if expr:
+                if not expr.ty.substitutable_for(ty):
+                    raise ParseError()
+                if expr.ty != ty:
+                    expr = \
+                        TypedASTNode(
+                            'cast',
+                            expr = expr,
+                            ty = ty,
+                        )
         else:
+            if expr is None:
+                raise TypeError()
             ty = expr.ty
         statement = \
             TypedASTNode(
