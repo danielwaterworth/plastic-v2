@@ -133,6 +133,19 @@ enum
     part(partial_http_result_t),
 
 define
+  main_loop
+    <-
+      accept_sock: i32,
+    ->
+      void
+    = {
+      loop {
+        let client_sock = accept(accept_sock, null, null);
+        puts("new connection\00");
+      }
+    }
+
+define
   main
     = {
       let addr: ptr(addrinfo) = null;
@@ -176,10 +189,7 @@ define
         return void;
       }
 
-      loop {
-        let client_sock = accept(accept_sock, null, null);
-        puts("new connection\00");
-      }
+      main_loop(accept_sock);
 
       return void;
     }

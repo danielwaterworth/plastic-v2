@@ -49,7 +49,12 @@ class Lexer:
     def __init__(self, text):
         self.remaining = text
         self.line = 1
+        self.column = 1
         self.tokens = []
+
+    @property
+    def pos(self):
+        return (self.line, self.column)
 
     def eof(self):
         return len(self.remaining) == 0
@@ -59,7 +64,13 @@ class Lexer:
         return self.remaining[0]
 
     def advance(self, n):
-        self.line += self.remaining[:n].count('\n')
+        skipping_over = self.remaining[:n]
+        for c in skipping_over:
+            if c == '\n':
+                self.column = 1
+                self.line += 1
+            else:
+                self.column += 1
         self.remaining = self.remaining[n:]
 
     def expect(self, s):
@@ -83,6 +94,7 @@ class Lexer:
         return next.isalpha() or next.isdigit() or next in '_'
 
     def lex_identifier(self):
+        pos = self.pos
         output = ""
         if not self.next.isalpha():
             raise ParseError()
@@ -93,23 +105,26 @@ class Lexer:
             self.advance(1)
         if output in keywords:
             return Token('keyword', keyword = output)
-        return Token('identifier', name = output)
+        return Token('identifier', pos = pos, name = output)
 
     def lex_number(self):
+        pos = self.pos
         s = ""
         while not self.eof() and self.next.isdigit():
             s += self.next
             self.advance(1)
-        return Token('number', n = int(s))
+        return Token('number', pos = pos, n = int(s))
 
     def lex_symbol(self):
+        pos = self.pos
         s = ""
         while not self.eof() and self.next in symbol_chars:
             s += self.next
             self.advance(1)
-        return Token('symbol', symbol = s)
+        return Token('symbol', pos = pos, symbol = s)
 
     def lex_string(self):
+        pos = self.pos
         assert self.next == '"'
         self.advance(1)
         st = ""
@@ -148,20 +163,22 @@ class Lexer:
         if self.eof():
             raise LexError()
         self.advance(1)
-        return Token('string', string = st)
+        return Token('string', pos = pos, string = st)
 
     def lex_char(self):
+        pos = self.pos
         self.expect('\'')
         c = self.next
         self.advance(1)
         self.expect('\'')
-        return Token('character', c = c)
+        return Token('character', pos = pos, c = c)
 
     def lex(self):
         self.skip_ws()
         while not self.eof():
+            pos = self.pos
             if self.next in special_symbols:
-                self.tokens.append(Token(special_symbols[self.next]))
+                self.tokens.append(Token(special_symbols[self.next], pos = pos))
                 self.advance(1)
             elif self.next == '"':
                 self.tokens.append(self.lex_string())

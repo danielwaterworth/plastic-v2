@@ -465,64 +465,33 @@ class Parser:
         return_type = ASTNode('named_type', name = 'void')
         body = None
 
-        self.save()
         symbol = self.parse_symbol()
 
         if symbol == "<-":
-            self.discard()
-            while True:
-                self.save()
-                try:
-                    arg_name = self.parse_identifier()
-                    self.expect('colon')
-                    arg_type = self.parse_type()
-                    self.expect('comma')
-                except ParseError:
-                    self.restore()
-                    break
-                else:
-                    args.append((arg_name, arg_type))
-                    self.discard()
-            self.save()
-            try:
-                symbol = self.parse_symbol()
-            except ParseError:
-                symbol = None
+            while self.next.tag == 'identifier':
+                arg_name = self.next.name
+                self.advance()
+                self.expect('colon')
+                arg_type = self.parse_type()
+                self.expect('comma')
+                args.append((arg_name, arg_type))
+            symbol = self.parse_symbol()
 
         if symbol == '<=':
-            self.discard()
             consume_type = self.parse_type()
-
-            self.save()
-            try:
-                symbol = self.parse_symbol()
-            except ParseError:
-                symbol = None
+            symbol = self.parse_symbol()
 
         if symbol == '=>':
-            self.discard()
             product_type = self.parse_type()
-
-            self.save()
-            try:
-                symbol = self.parse_symbol()
-            except ParseError:
-                symbol = None
+            symbol = self.parse_symbol()
 
         if symbol == "->":
-            self.discard()
             return_type = self.parse_type()
-
-            self.save()
-            try:
-                symbol = self.parse_symbol()
-            except ParseError:
-                symbol = None
+            symbol = self.parse_symbol()
 
         if symbol != '=':
             raise ParseError('function with no body')
 
-        self.discard()
         self.expect('open_brace')
 
         body = self.parse_body()

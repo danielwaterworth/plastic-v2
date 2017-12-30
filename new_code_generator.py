@@ -716,7 +716,7 @@ class CodeGenerator:
         for arg_name, arg_type in decl.args:
             llvm_name = '%' + arg_name
             llvm_type = self.generate_type(arg_type)
-            arg_ptr = self.alloca(llvm_type)
+            arg_ptr = function_writer.alloca(llvm_type)
             function_writer.store(arg_ptr, llvm_type, llvm_name)
             args.append((llvm_name, llvm_type))
             arg_types.append(llvm_type)
