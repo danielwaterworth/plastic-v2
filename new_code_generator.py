@@ -374,8 +374,7 @@ class FunctionWriter:
     def generate_comparison(self, expr):
         ops = {
             '==': 'eq',
-            '<': 'ult',
-            '>': 'ugt',
+            '!=': 'ne',
         }
         a_ty, a = self.generate_expression(expr.a)
         b_ty, b = self.generate_expression(expr.b)

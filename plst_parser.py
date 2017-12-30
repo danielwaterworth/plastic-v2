@@ -1,3 +1,5 @@
+from constants import *
+
 class ParseError(Exception):
     pass
 
@@ -185,13 +187,6 @@ class Parser:
             name = self.next.name
             self.advance()
             return ASTNode('variable', name = name)
-        elif self.next.tag == 'keyword':
-            name = self.next.keyword
-            if name == 'yield':
-                expr = self.parse_expression()
-                return ASTNode('yield_expression', expr = expr)
-            else:
-                raise ParseError()
         else:
             n = self.parse_number()
             return ASTNode('number_literal', n = n)
@@ -243,74 +238,42 @@ class Parser:
     def parse_expression_4(self):
         expr = self.parse_expression_3()
         while not self.eof():
-            self.save()
-            try:
-                symbol = self.parse_keyword()
-                if symbol == 'as':
-                    self.discard()
-                    type = self.parse_type()
-                    expr = ASTNode('cast', expr = expr, type = type)
-                else:
-                    self.restore()
-                    break
-            except ParseError:
-                self.restore()
+            if self.next.tag == 'keyword' and self.next.keyword == 'as':
+                self.advance()
+                type = self.parse_type()
+                expr = ASTNode('cast', expr = expr, type = type)
+            else:
                 break
         return expr
 
     def parse_expression_5(self):
         expr = self.parse_expression_4()
         while not self.eof():
-            self.save()
-            try:
-                symbol = self.parse_symbol()
-                if symbol == '-':
-                    self.discard()
+            operators = ['-', '+']
+            if self.next.tag == 'symbol':
+                symbol = self.next.symbol
+                if self.next.symbol in operators:
+                    self.advance()
                     other = self.parse_expression_4()
-                    expr = ASTNode('-', a = expr, b = other)
-                elif symbol == '+':
-                    self.discard()
-                    other = self.parse_expression_4()
-                    expr = ASTNode('+', a = expr, b = other)
+                    expr = ASTNode(symbol, a = expr, b = other)
                 else:
-                    self.restore()
                     break
-            except ParseError:
-                self.restore()
+            else:
                 break
         return expr
 
     def parse_expression_6(self):
         expr = self.parse_expression_5()
         while not self.eof():
-            self.save()
-            try:
-                symbol = self.parse_symbol()
-                if symbol == '==':
-                    self.discard()
+            if self.next.tag == 'symbol':
+                symbol = self.next.symbol
+                if symbol in comparison_operators:
+                    self.advance()
                     other = self.parse_expression_5()
-                    expr = ASTNode('==', a = expr, b = other)
-                elif symbol == '<':
-                    self.discard()
-                    other = self.parse_expression_5()
-                    expr = ASTNode('<', a = expr, b = other)
-                elif symbol == '>':
-                    self.discard()
-                    other = self.parse_expression_5()
-                    expr = ASTNode('>', a = expr, b = other)
-                elif symbol == '!=':
-                    self.discard()
-                    other = self.parse_expression_5()
-                    expr = \
-                        ASTNode(
-                            'not',
-                            expr = ASTNode('==', a = expr, b = other),
-                        )
+                    expr = ASTNode(symbol, a = expr, b = other)
                 else:
-                    self.restore()
                     break
-            except ParseError:
-                self.restore()
+            else:
                 break
         return expr
 

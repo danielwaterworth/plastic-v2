@@ -1,1 +1,1 @@
-comparison_operators = ['==', '<', '>']
+comparison_operators = ['==', '!=']
