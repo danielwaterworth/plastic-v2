@@ -220,6 +220,14 @@ class Parser:
                     'address_of',
                     expr = expr,
                 )
+        elif self.next.tag == 'symbol' and self.next.symbol == '-':
+            self.advance()
+            expr = self.parse_expression_2()
+            return \
+                ASTNode(
+                    'uminus',
+                    expr = expr,
+                )
         else:
             return self.parse_expression_1()
 
