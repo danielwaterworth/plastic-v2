@@ -1,6 +1,5 @@
 import itertools
 import type_checker
-from constants import *
 
 class CGASTNode:
     def __init__(self, tag, **kwargs):
@@ -372,16 +371,34 @@ class FunctionWriter:
             return to_ty, self.bitcast(from_ty, to_ty, value)
 
     def generate_comparison(self, expr):
-        ops = {
-            '==': 'eq',
-            '!=': 'ne',
-        }
         a_ty, a = self.generate_expression(expr.a)
         b_ty, b = self.generate_expression(expr.b)
-        if a_ty.tag == 'number' or a_ty.tag == 'ptr_to':
+        if expr.tag in ['==', '!=']:
+            ops = {
+                '==': 'eq',
+                '!=': 'ne',
+            }
+            if a_ty.tag == 'number' or a_ty.tag == 'ptr_to':
+                return boolean, self.icmp(ops[expr.tag], a_ty, a, b)
+            else:
+                raise NotImplementedError()
+        elif expr.tag in ['<', '>', '<=', '>=']:
+            assert type(expr.a.ty) == type_checker.NumberType
+            if expr.a.ty.signed:
+                ops = {
+                    '<': 'slt',
+                    '>': 'sgt',
+                    '<=': 'sle',
+                    '>=': 'sge',
+                }
+            else:
+                ops = {
+                    '<': 'ult',
+                    '>': 'ugt',
+                    '<=': 'ule',
+                    '>=': 'uge',
+                }
             return boolean, self.icmp(ops[expr.tag], a_ty, a, b)
-        else:
-            raise NotImplementedError()
 
     def generate_operator(self, expr):
         functions = {
@@ -419,7 +436,7 @@ class FunctionWriter:
             output = self.generate_character_literal(expr)
         elif expr.tag == 'cast':
             output = self.generate_cast(expr)
-        elif expr.tag in comparison_operators:
+        elif expr.tag in ['==', '!=', '<', '>', '<=', '>=']:
             output = self.generate_comparison(expr)
         elif expr.tag in ['+', '-', '*', '/']:
             output = self.generate_operator(expr)
@@ -439,6 +456,7 @@ class FunctionWriter:
             ty, value = self.generate_expression(expr.expr)
             return ty, self.not_(value)
         else:
+            print(expr.tag)
             raise NotImplementedError()
         assert type(output) == tuple, expr.tag
         assert len(output) == 2, expr.tag

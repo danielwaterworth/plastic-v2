@@ -1,5 +1,3 @@
-from constants import *
-
 class Kind:
     pass
 
