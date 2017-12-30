@@ -35,6 +35,16 @@ struct
     ai_next: ptr(addrinfo),
 
 extern
+  getaddrinfo
+    <-
+      ptr(i8),
+      ptr(i8),
+      ptr(addrinfo),
+      ptr(ptr(addrinfo)),
+    ->
+      i32
+
+extern
   socket
     <-
       u32,
@@ -48,25 +58,24 @@ extern
     <-
       i32,
       ptr(sockaddr),
-      ptr(u32),
+      u32,
     ->
       u32
-
-extern
-  getaddrinfo
-    <-
-      ptr(i8),
-      ptr(i8),
-      ptr(addrinfo),
-      ptr(ptr(addrinfo)),
-    ->
-      i32
 
 extern
   listen
     <-
       i32,
       i32,
+    ->
+      i32
+
+extern
+  accept
+    <-
+      i32,
+      ptr(sockaddr),
+      ptr(u32),
     ->
       i32
 
@@ -126,8 +135,6 @@ enum
 define
   main
     = {
-      let x = af_inet;
-      let accept_sock = socket(af_inet, sock_stream, default_protocol);
       let addr: ptr(addrinfo) = null;
       let hints =
         addrinfo(
@@ -145,25 +152,34 @@ define
         return void;
       }
 
-      puts("socket\00");
-      let accept_sock = socket(af_inet, sock_stream, default_protocol);
-      if (accept_sock < 0) {
+      let accept_sock: i32 = 0;
+      loop {
+        puts("socket\00");
+        accept_sock = socket(af_inet, sock_stream, default_protocol);
+        if (accept_sock >= 0) {
+          puts("bind\00");
+          if (bind(accept_sock, (*addr).ai_addr, (*addr).ai_addrlen) == 0) {
+            puts("found a socket\00");
+            break;
+          }
+        }
+
+        addr = (*addr).ai_next;
+        if (addr == null) {
+          puts("failed to find an addr\00");
+          return void;
+        }
+      }
+
+      puts("listen\00");
+      if (listen(accept_sock, 1024) != 0) {
         return void;
       }
 
-      puts("bind\00");
-      if (bind(accept_sock, (*addr).ai_addr, &(*addr).ai_addrlen) != 0) {
-        return void;
+      loop {
+        let client_sock = accept(accept_sock, null, null);
+        puts("new connection\00");
       }
-
-      # puts("listen\00");
-      # if (listen(accept_sock, 1024) != 0) {
-      #   return void;
-      # }
-
-      # loop {
-      #   let client_sock = accept(accept_sock);
-      # }
 
       return void;
     }

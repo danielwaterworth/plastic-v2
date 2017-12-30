@@ -343,7 +343,7 @@ class Parser:
         l_expr = self.parse_l_expr()
         self.expect_symbol('=')
         expr = self.parse_expression()
-        self.expect('close_brace')
+        self.expect('semicolon')
         return ASTNode('assignment', l_expr = l_expr, expr = expr)
 
     def parse_l_expr(self):

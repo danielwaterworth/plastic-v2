@@ -521,7 +521,9 @@ class FunctionWriter:
         self.scope = scope
 
     def generate_assignment(self, statement):
-        raise NotImplementedError()
+        l_ty, l_expr = self.generate_l_expr(statement.l_expr)
+        ty, expr = self.generate_expression(statement.expr)
+        self.store(l_expr, ty, expr)
 
     def generate_if_statement(self, statement):
         scope = dict(self.scope)

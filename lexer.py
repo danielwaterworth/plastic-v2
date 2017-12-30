@@ -174,6 +174,7 @@ class Lexer:
             elif self.next.isalpha():
                 self.tokens.append(self.lex_identifier())
             else:
+                print(self.next)
                 raise NotImplementedError()
             self.skip_ws()
         return self.tokens
