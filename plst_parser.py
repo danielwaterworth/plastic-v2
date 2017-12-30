@@ -249,25 +249,24 @@ class Parser:
     def parse_expression_5(self):
         expr = self.parse_expression_4()
         while not self.eof():
+            if self.next.tag == 'asterisk':
+                self.advance()
+                other = self.parse_expression_4()
+                expr = ASTNode('*', a = expr, b = other)
+            elif self.next.tag == 'symbol' and self.next.tag.symbol == '/':
+                self.advance()
+                other = self.parse_expression_4()
+                expr = ASTNode('/', a = expr, b = other)
+            else:
+                break
+        return expr
+    def parse_expression_6(self):
+        expr = self.parse_expression_5()
+        while not self.eof():
             operators = ['-', '+']
             if self.next.tag == 'symbol':
                 symbol = self.next.symbol
                 if self.next.symbol in operators:
-                    self.advance()
-                    other = self.parse_expression_4()
-                    expr = ASTNode(symbol, a = expr, b = other)
-                else:
-                    break
-            else:
-                break
-        return expr
-
-    def parse_expression_6(self):
-        expr = self.parse_expression_5()
-        while not self.eof():
-            if self.next.tag == 'symbol':
-                symbol = self.next.symbol
-                if symbol in comparison_operators:
                     self.advance()
                     other = self.parse_expression_5()
                     expr = ASTNode(symbol, a = expr, b = other)
@@ -277,8 +276,23 @@ class Parser:
                 break
         return expr
 
+    def parse_expression_7(self):
+        expr = self.parse_expression_6()
+        while not self.eof():
+            if self.next.tag == 'symbol':
+                symbol = self.next.symbol
+                if symbol in comparison_operators:
+                    self.advance()
+                    other = self.parse_expression_6()
+                    expr = ASTNode(symbol, a = expr, b = other)
+                else:
+                    break
+            else:
+                break
+        return expr
+
     def parse_expression(self):
-        return self.parse_expression_6()
+        return self.parse_expression_7()
 
     def parse_let_statement(self):
         self.expect_keyword('let')
