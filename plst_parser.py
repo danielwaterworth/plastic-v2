@@ -123,19 +123,12 @@ class Parser:
         name = self.parse_identifier()
         fields = []
 
-        while True:
-            self.save()
-            try:
-                field_name = self.parse_identifier()
-                self.expect('colon')
-                value = self.parse_type()
-                self.expect('comma')
-            except ParseError:
-                self.restore()
-                break
-            else:
-                fields.append((field_name, value))
-                self.discard()
+        while self.next.tag == 'identifier':
+            field_name = self.parse_identifier()
+            self.expect('colon')
+            value = self.parse_type()
+            self.expect('comma')
+            fields.append((field_name, value))
 
         return \
             ASTNode(
