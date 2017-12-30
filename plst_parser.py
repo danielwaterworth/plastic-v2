@@ -467,12 +467,8 @@ class Parser:
     def parse_body(self):
         statements = []
 
-        while True:
-            statement = self.try_(self.parse_statement)
-            if statement:
-                statements.append(statement)
-            else:
-                break
+        while self.next.tag != 'close_brace':
+            statements.append(self.parse_statement())
 
         self.expect('close_brace')
 
