@@ -105,19 +105,12 @@ class Parser:
         name = self.parse_identifier()
         constructors = []
 
-        while True:
-            self.save()
-            try:
-                constructor_name = self.parse_identifier()
-                self.expect('open_paren')
-                values = self.parse_type_arg_list()
-                self.expect('comma')
-            except ParseError:
-                self.restore()
-                break
-            else:
-                constructors.append((constructor_name, values))
-                self.discard()
+        while self.next.tag == 'identifier':
+            constructor_name = self.parse_identifier()
+            self.expect('open_paren')
+            values = self.parse_type_arg_list()
+            self.expect('comma')
+            constructors.append((constructor_name, values))
 
         return \
             ASTNode(
