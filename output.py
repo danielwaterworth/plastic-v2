@@ -205,6 +205,14 @@ class LLVMWriter:
             self.writeout_value(instruction.a)
             self.write(", ")
             self.writeout_value(instruction.b)
+        elif instruction.tag == 'sub':
+            self.write(instruction.dst)
+            self.write(" = sub ")
+            self.writeout_type(instruction.ty)
+            self.write(" ")
+            self.writeout_value(instruction.a)
+            self.write(", ")
+            self.writeout_value(instruction.b)
         elif instruction.tag == 'load':
             self.write(instruction.dst)
             self.write(" = load ")

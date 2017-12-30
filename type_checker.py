@@ -102,7 +102,12 @@ class OpaqueNumberType(TypeLevelExpr):
     kind = star
 
     def substitutable_for(self, other):
-        return type(other) == NumberType
+        return \
+            type(other) == NumberType or \
+            type(other) == OpaqueNumberType
+
+    def __eq__(self, other):
+        return type(other) == OpaqueNumberType
 
 class TypeApplication(TypeLevelExpr):
     def __init__(self, function, args):
@@ -475,28 +480,30 @@ class Environment:
                     b = b,
                     ty = boolean,
                 )
-        elif expr.tag == '+':
+        elif expr.tag in ['+', '-']:
             a = self.check_expression(expr.a)
             b = self.check_expression(expr.b)
-            compatible = a.ty == b.ty
-            if not compatible:
+            if a.ty == b.ty:
+                pass
+            if a.ty.substitutable_for(b.ty):
+                a = \
+                    TypedASTNode(
+                        'cast',
+                        expr = a,
+                        ty = b.ty,
+                    )
+            elif b.ty.substitutable_for(a.ty):
+                b = \
+                    TypedASTNode(
+                        'cast',
+                        expr = b,
+                        ty = a.ty,
+                    )
+            else:
                 raise TypeError()
             return \
                 TypedASTNode(
-                    '+',
-                    a = a,
-                    b = b,
-                    ty = a.ty,
-                )
-        elif expr.tag == '-':
-            a = self.check_expression(expr.a)
-            b = self.check_expression(expr.b)
-            compatible = a.ty == b.ty
-            if not compatible:
-                raise TypeError()
-            return \
-                TypedASTNode(
-                    '-',
+                    expr.tag,
                     a = a,
                     b = b,
                     ty = a.ty,
@@ -558,6 +565,9 @@ class Environment:
                     expr = expr,
                     ty = boolean,
                 )
+        elif expr.tag == 'uminus':
+            expr = self.check_expression(expr.expr)
+            raise NotImplementedError()
         print(expr.tag)
         raise NotImplementedError()
 
