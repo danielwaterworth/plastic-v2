@@ -1,5 +1,3 @@
-from constants import *
-
 class ParseError(Exception):
     pass
 

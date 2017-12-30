@@ -419,7 +419,7 @@ class Environment:
                     n = ord(expr.character),
                     ty = NumberType(False, 8),
                 )
-        elif expr.tag in comparison_operators:
+        elif expr.tag in ['==', '!=']:
             a = self.check_expression(expr.a)
             b = self.check_expression(expr.b)
             if a.ty == b.ty:
@@ -439,6 +439,36 @@ class Environment:
                         ty = a.ty,
                     )
             else:
+                raise TypeError()
+            return \
+                TypedASTNode(
+                    expr.tag,
+                    a = a,
+                    b = b,
+                    ty = boolean,
+                )
+        elif expr.tag in ['<', '>', '<=', '>=']:
+            a = self.check_expression(expr.a)
+            b = self.check_expression(expr.b)
+            if a.ty == b.ty:
+                pass
+            if a.ty.substitutable_for(b.ty):
+                a = \
+                    TypedASTNode(
+                        'cast',
+                        expr = a,
+                        ty = b.ty,
+                    )
+            elif b.ty.substitutable_for(a.ty):
+                b = \
+                    TypedASTNode(
+                        'cast',
+                        expr = b,
+                        ty = a.ty,
+                    )
+            else:
+                raise TypeError()
+            if not type(a.ty) == NumberType:
                 raise TypeError()
             return \
                 TypedASTNode(
