@@ -271,10 +271,9 @@ class Parser:
     def parse_expression_6(self):
         expr = self.parse_expression_5()
         while not self.eof():
-            operators = ['-', '+']
             if self.next.tag == 'symbol':
                 symbol = self.next.symbol
-                if self.next.symbol in operators:
+                if self.next.symbol in ['-', '+']:
                     self.advance()
                     other = self.parse_expression_5()
                     expr = ASTNode(symbol, a = expr, b = other)
@@ -289,7 +288,7 @@ class Parser:
         while not self.eof():
             if self.next.tag == 'symbol':
                 symbol = self.next.symbol
-                if symbol in comparison_operators:
+                if symbol in ['==', '!=', '<', '<=', '>', '>=']:
                     self.advance()
                     other = self.parse_expression_6()
                     expr = ASTNode(symbol, a = expr, b = other)
