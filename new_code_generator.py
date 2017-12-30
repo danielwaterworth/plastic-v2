@@ -383,15 +383,14 @@ class FunctionWriter:
         else:
             raise NotImplementedError()
 
-    def generate_plus(self, expr):
+    def generate_operator(self, expr):
+        functions = {
+            '+': self.add,
+            '-': self.sub,
+        }
         ty, a = self.generate_expression(expr.a)
         _, b = self.generate_expression(expr.a)
-        return ty, self.add(a, b, ty)
-
-    def generate_minus(self, expr):
-        ty, a = self.generate_expression(expr.a)
-        _, b = self.generate_expression(expr.a)
-        return ty, self.sub(a, b, ty)
+        return ty, functions[expr.tag](a, b, ty)
 
     def generate_number_literal(self, expr):
         ty = self.generate_type(expr.ty)
@@ -422,10 +421,8 @@ class FunctionWriter:
             output = self.generate_cast(expr)
         elif expr.tag in comparison_operators:
             output = self.generate_comparison(expr)
-        elif expr.tag == '+':
-            output = self.generate_plus(expr)
-        elif expr.tag == '-':
-            output = self.generate_minus(expr)
+        elif expr.tag in ['+', '-', '*', '/']:
+            output = self.generate_operator(expr)
         elif expr.tag == 'number_literal':
             output = self.generate_number_literal(expr)
         elif expr.tag == 'string_literal':
