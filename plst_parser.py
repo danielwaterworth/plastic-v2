@@ -513,14 +513,12 @@ class Parser:
         arg_types = []
         return_type = ASTNode('void')
 
-        self.save()
-        try:
+        if self.next.tag == 'symbol':
             symbol = self.parse_symbol()
-        except ParseError:
+        else:
             symbol = None
 
         if symbol == "<-":
-            self.discard()
             while True:
                 self.save()
                 try:
@@ -532,17 +530,16 @@ class Parser:
                 else:
                     arg_types.append(arg_type)
                     self.discard()
-            self.save()
-            try:
+
+            if self.next.tag == 'symbol':
                 symbol = self.parse_symbol()
-            except ParseError:
+            else:
                 symbol = None
 
         if symbol == "->":
-            self.discard()
             return_type = self.parse_type()
-        else:
-            self.restore()
+        elif symbol != None:
+            raise ParseError()
 
         return \
             ASTNode(
