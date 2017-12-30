@@ -332,7 +332,7 @@ class FunctionWriter:
         struct_ty, ptr = self.generate_l_expr(expr.l_expr)
         field = expr.field
         index, field_ty = self.code_generator.structs[struct_ty.ty.name][field]
-        return field_ty, self.getelementptr(struct_ty.ty, struct_ty, ptr, ['0', str(index)])
+        return ptr_to(field_ty), self.getelementptr(struct_ty.ty, struct_ty, ptr, ['0', str(index)])
 
     def generate_application(self, expr):
         ty, function = self.generate_expression(expr.function)
