@@ -268,6 +268,7 @@ class Parser:
             else:
                 break
         return expr
+
     def parse_expression_6(self):
         expr = self.parse_expression_5()
         while not self.eof():
