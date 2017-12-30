@@ -444,27 +444,19 @@ class Parser:
             return output
 
     def parse_statement(self):
-        statement = self.try_(self.parse_let_statement)
-        if statement:
-            return statement
-
-        statement = self.try_(self.parse_loop_statement)
-        if statement:
-            return statement
-
-        statement = self.try_(self.parse_if_statement)
-        if statement:
-            return statement
+        if self.next.tag == 'keyword':
+            if self.next.keyword == 'let':
+                return self.parse_let_statement()
+            elif self.next.keyword == 'loop':
+                return self.parse_loop_statement()
+            elif self.next.keyword == 'if':
+                return self.parse_if_statement()
+            elif self.next.keyword == 'break':
+                return self.parse_break()
+            elif self.next.keyword == 'return':
+                return self.parse_return()
 
         statement = self.try_(self.parse_assignment)
-        if statement:
-            return statement
-
-        statement = self.try_(self.parse_break)
-        if statement:
-            return statement
-
-        statement = self.try_(self.parse_return)
         if statement:
             return statement
 
