@@ -80,6 +80,45 @@ extern
       i32
 
 extern
+  close
+    <-
+      i32,
+    ->
+      i32
+
+struct
+  epoll_event
+    events: u32,
+    data: u64,
+
+extern
+  epoll_create1
+    <-
+      i32,
+    ->
+      i32
+
+extern
+  epoll_ctl
+    <-
+      i32,
+      i32,
+      i32,
+      ptr(epoll_event),
+    ->
+      i32
+
+extern
+  epoll_wait
+    <-
+      i32,
+      ptr(epoll_event),
+      i32,
+      i32,
+    ->
+      i32
+
+extern
   memchr
     <-
       ptr(i8),
