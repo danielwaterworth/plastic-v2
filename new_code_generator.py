@@ -187,6 +187,32 @@ class FunctionWriter:
         )
         return dst
 
+    def and_(self, a, b, ty):
+        dst = next(self.variable_names)
+        self.current_basic_block.instructions.append(
+            CGASTNode(
+                'and',
+                a = a,
+                b = b,
+                ty = ty,
+                dst = dst,
+            )
+        )
+        return dst
+
+    def or_(self, a, b, ty):
+        dst = next(self.variable_names)
+        self.current_basic_block.instructions.append(
+            CGASTNode(
+                'or',
+                a = a,
+                b = b,
+                ty = ty,
+                dst = dst,
+            )
+        )
+        return dst
+
     def getelementptr(self, dst_type, source_type, value, offset):
         dst = next(self.variable_names)
         self.current_basic_block.instructions.append(
@@ -331,11 +357,25 @@ class FunctionWriter:
             return ptr_to(ty), ptr
         raise NotImplementedError()
 
+    def generate_array_access_l(self, expr):
+        array_ty, ptr = self.generate_l_expr(expr.l_expr)
+        index_ty, index = self.generate_expression(expr.index)
+        value = self.getelementptr(array_ty.ty, array_ty, ptr, ['0', index])
+        return ptr_to(array_ty.ty.of), value
+
     def generate_field_access_l(self, expr):
         struct_ty, ptr = self.generate_l_expr(expr.l_expr)
         field = expr.field
         index, field_ty = self.code_generator.structs[struct_ty.ty.name][field]
         return ptr_to(field_ty), self.getelementptr(struct_ty.ty, struct_ty, ptr, ['0', str(index)])
+
+    def generate_array_access(self, expr):
+        array_ty, value = self.generate_expression(expr.expr)
+        index_ty, index = self.generate_expression(expr.index)
+        ptr = self.alloca(array_ty)
+        self.store(ptr, array_ty, value)
+        element_ptr = self.getelementptr(array_ty, ptr_to(array_ty), ptr, ['0', index])
+        return array_ty.of, self.load(array_ty.of, element_ptr)
 
     def generate_application(self, expr):
         ty, function = self.generate_expression(expr.function)
@@ -407,9 +447,11 @@ class FunctionWriter:
         functions = {
             '+': self.add,
             '-': self.sub,
+            '|': self.or_,
+            '&': self.and_,
         }
         ty, a = self.generate_expression(expr.a)
-        _, b = self.generate_expression(expr.a)
+        _, b = self.generate_expression(expr.b)
         return ty, functions[expr.tag](a, b, ty)
 
     def generate_number_literal(self, expr):
@@ -441,7 +483,7 @@ class FunctionWriter:
             output = self.generate_cast(expr)
         elif expr.tag in ['==', '!=', '<', '>', '<=', '>=']:
             output = self.generate_comparison(expr)
-        elif expr.tag in ['+', '-', '*', '/']:
+        elif expr.tag in ['+', '-', '|', '*', '/', '&']:
             output = self.generate_operator(expr)
         elif expr.tag == 'number_literal':
             output = self.generate_number_literal(expr)
@@ -458,6 +500,11 @@ class FunctionWriter:
         elif expr.tag == 'not':
             ty, value = self.generate_expression(expr.expr)
             return ty, self.not_(value)
+        elif expr.tag == 'uminus':
+            ty, value = self.generate_expression(expr.expr)
+            return ty, self.sub('0', value, ty)
+        elif expr.tag == 'array_access':
+            output = self.generate_array_access(expr)
         else:
             print(expr.tag)
             raise NotImplementedError()
@@ -475,6 +522,8 @@ class FunctionWriter:
             output = self.generate_field_access_l(expr)
         elif expr.tag == 'string_literal':
             output = self.generate_string_literal_l(expr)
+        elif expr.tag == 'array_access':
+            output = self.generate_array_access_l(expr)
         elif expr.tag == 'deref':
             output = self.generate_expression(expr.expr)
         else:

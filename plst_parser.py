@@ -191,6 +191,11 @@ class Parser:
                 self.expect('open_paren')
                 args = self.parse_type_arg_list()
                 expr = ASTNode('apply_type_args', function = expr, args = args)
+            elif self.next.tag == 'open_square':
+                self.advance()
+                index = self.parse_expression()
+                self.expect('close_square')
+                expr = ASTNode('array_access', expr = expr, index = index)
             else:
                 break
         return expr
@@ -249,6 +254,10 @@ class Parser:
                 self.advance()
                 other = self.parse_expression_4()
                 expr = ASTNode('/', a = expr, b = other)
+            elif self.next.tag == 'ampersand':
+                self.advance()
+                other = self.parse_expression_4()
+                expr = ASTNode('&', a = expr, b = other)
             else:
                 break
         return expr
@@ -258,7 +267,7 @@ class Parser:
         while not self.eof():
             if self.next.tag == 'symbol':
                 symbol = self.next.symbol
-                if self.next.symbol in ['-', '+']:
+                if self.next.symbol in ['-', '+', '|']:
                     self.advance()
                     other = self.parse_expression_5()
                     expr = ASTNode(symbol, a = expr, b = other)

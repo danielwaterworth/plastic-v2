@@ -86,6 +86,78 @@ extern
     ->
       i32
 
+constant
+  epollin
+    1
+
+constant
+  epollpri
+    2
+
+constant
+  epollout
+    4
+
+constant
+  epollerr
+    8
+
+constant
+  epollhup
+    16
+
+constant
+  epollrdnorm
+    64
+
+constant
+  epollrdband
+    128
+
+constant
+  epollwrnorm
+    256
+
+constant
+  epollwrband
+    512
+
+constant
+  epollmsg
+    1024
+
+constant
+  epollrdhup
+    8192
+
+constant
+  epollexclusive
+    268435456
+
+constant
+  epollwakeup
+    536870912
+
+constant
+  epolloneshot
+    1073741824
+
+constant
+  epollet
+    2147483648
+
+constant
+  epoll_ctl_add
+    1
+
+constant
+  epoll_ctl_del
+    2
+
+constant
+  epoll_ctl_mod
+    3
+
 struct
   epoll_event
     events: u32,
@@ -176,7 +248,7 @@ define
     ->
       i32
     = {
-      let err: i32 = 0 - 1;
+      let err: i32 = -1;
       let addr: ptr(addrinfo) = null;
       let hints =
         addrinfo(
@@ -230,6 +302,7 @@ define
       void
     = {
       loop {
+        puts("epoll_wait\00");
         let events: array(epoll_event, 1024);
         let num_ready = epoll_wait(epoll_sock, &events[0], 1000, -1);
         if (num_ready < 0) {
@@ -237,23 +310,46 @@ define
           return void;
         }
 
-        let i = 0;
+        putint(num_ready);
+        let i: i32 = 0;
         loop {
           if (i >= num_ready) {
+            puts("breaking\00");
             break;
           }
+          putint(i);
           let event = events[i];
           i = i + 1;
 
-          event.events;
-          event.data;
+          let fd = (event.data as u32) as i32;
+          if (event.events & epollin != 0) {
+            puts("fd\00");
+            putint(fd);
+          }
         }
       }
     }
 
 define
+  test_loop
+    = {
+      let i: i32 = 0;
+      loop {
+        if (i >= 5) {
+          puts("breaking\00");
+          break;
+        }
+        putint(i);
+        i = i + 1;
+      }
+      return void;
+    }
+
+define
   main
     = {
+      test_loop();
+
       let accept_sock = initialize_accept_socket();
       if (accept_sock < 0) {
         return void;
@@ -264,7 +360,8 @@ define
         return void;
       }
 
-      # epoll_ctl(epoll_sock, epoll_ctl_add, accept_sock, 
+      let event = epoll_event(epollin, 0);
+      epoll_ctl(epoll_sock, epoll_ctl_add, accept_sock, &event);
 
       main_loop(accept_sock, epoll_sock);
       return void;

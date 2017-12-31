@@ -216,6 +216,9 @@ def is_array(x):
             return True
     return False
 
+def is_number(x):
+    return type(x) in [NumberType, OpaqueNumberType]
+
 class TypedASTNode:
     def __init__(self, tag, **kwargs):
         self.tag = tag
@@ -480,7 +483,7 @@ class Environment:
                     b = b,
                     ty = boolean,
                 )
-        elif expr.tag in ['+', '-']:
+        elif expr.tag in ['+', '-', '|', '&']:
             a = self.check_expression(expr.a)
             b = self.check_expression(expr.b)
             if a.ty == b.ty:
@@ -567,7 +570,28 @@ class Environment:
                 )
         elif expr.tag == 'uminus':
             expr = self.check_expression(expr.expr)
-            raise NotImplementedError()
+            if not is_number(expr.ty):
+                raise TypeError()
+            return \
+                TypedASTNode(
+                    'uminus',
+                    expr = expr,
+                    ty = expr.ty,
+                )
+        elif expr.tag == 'array_access':
+            root = self.check_expression(expr.expr)
+            index = self.check_expression(expr.index)
+            if not is_array(root.ty):
+                raise TypeError()
+            if not is_number(index.ty):
+                raise TypeError()
+            return \
+                TypedASTNode(
+                    'array_access',
+                    expr = root,
+                    index = index,
+                    ty = root.ty.args[0],
+                )
         print(expr.tag)
         raise NotImplementedError()
 
@@ -721,7 +745,22 @@ class Environment:
                     expr = expr,
                     ty = expr.ty.args[0],
                 )
+        elif l_expr.tag == 'array_access':
+            root = self.check_l_expression(l_expr.l_expr)
+            index = self.check_expression(l_expr.index)
+            if not is_array(root.ty):
+                raise TypeError()
+            if not is_number(index.ty):
+                raise TypeError()
+            return \
+                TypedASTNode(
+                    'array_access',
+                    l_expr = root,
+                    index = index,
+                    ty = root.ty.args[0],
+                )
         else:
+            print(l_expr.tag)
             raise NotImplementedError()
 
     def check_function(self, decl):
