@@ -162,50 +162,12 @@ class FunctionWriter:
             )
             return dst
 
-    def sub(self, a, b, ty):
+    def binop(self, op, a, b, ty):
         dst = next(self.variable_names)
         self.current_basic_block.instructions.append(
             CGASTNode(
-                'sub',
-                a = a,
-                b = b,
-                ty = ty,
-                dst = dst,
-            )
-        )
-        return dst
-
-    def add(self, a, b, ty):
-        dst = next(self.variable_names)
-        self.current_basic_block.instructions.append(
-            CGASTNode(
-                'add',
-                a = a,
-                b = b,
-                ty = ty,
-                dst = dst,
-            )
-        )
-        return dst
-
-    def and_(self, a, b, ty):
-        dst = next(self.variable_names)
-        self.current_basic_block.instructions.append(
-            CGASTNode(
-                'and',
-                a = a,
-                b = b,
-                ty = ty,
-                dst = dst,
-            )
-        )
-        return dst
-
-    def or_(self, a, b, ty):
-        dst = next(self.variable_names)
-        self.current_basic_block.instructions.append(
-            CGASTNode(
-                'or',
+                'binop',
+                op = op,
                 a = a,
                 b = b,
                 ty = ty,
@@ -445,15 +407,15 @@ class FunctionWriter:
             return boolean, self.icmp(ops[expr.tag], a_ty, a, b)
 
     def generate_operator(self, expr):
-        functions = {
-            '+': self.add,
-            '-': self.sub,
-            '|': self.or_,
-            '&': self.and_,
+        ops = {
+            '+': 'add',
+            '-': 'sub',
+            '|': 'or',
+            '&': 'and',
         }
         ty, a = self.generate_expression(expr.a)
         _, b = self.generate_expression(expr.b)
-        return ty, functions[expr.tag](a, b, ty)
+        return ty, self.binop(ops[expr.tag], a, b, ty)
 
     def generate_number_literal(self, expr):
         ty = self.generate_type(expr.ty)
@@ -503,7 +465,7 @@ class FunctionWriter:
             return ty, self.not_(value)
         elif expr.tag == 'uminus':
             ty, value = self.generate_expression(expr.expr)
-            return ty, self.sub('0', value, ty)
+            return ty, self.binop('sub', '0', value, ty)
         elif expr.tag == 'array_access':
             output = self.generate_array_access(expr)
         else:

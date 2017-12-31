@@ -197,33 +197,11 @@ class LLVMWriter:
             for off in instruction.offset:
                 self.write(", i32 ")
                 self.writeout_value(off)
-        elif instruction.tag == 'and':
+        elif instruction.tag == 'binop':
             self.write(instruction.dst)
-            self.write(" = and ")
-            self.writeout_type(instruction.ty)
+            self.write(" = ")
+            self.write(instruction.op)
             self.write(" ")
-            self.writeout_value(instruction.a)
-            self.write(", ")
-            self.writeout_value(instruction.b)
-        elif instruction.tag == 'or':
-            self.write(instruction.dst)
-            self.write(" = or ")
-            self.writeout_type(instruction.ty)
-            self.write(" ")
-            self.writeout_value(instruction.a)
-            self.write(", ")
-            self.writeout_value(instruction.b)
-        elif instruction.tag == 'add':
-            self.write(instruction.dst)
-            self.write(" = add ")
-            self.writeout_type(instruction.ty)
-            self.write(" ")
-            self.writeout_value(instruction.a)
-            self.write(", ")
-            self.writeout_value(instruction.b)
-        elif instruction.tag == 'sub':
-            self.write(instruction.dst)
-            self.write(" = sub ")
             self.writeout_type(instruction.ty)
             self.write(" ")
             self.writeout_value(instruction.a)
