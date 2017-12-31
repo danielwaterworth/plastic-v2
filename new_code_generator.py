@@ -90,7 +90,6 @@ class FunctionWriter:
         self.basic_blocks = []
         self.variable_names = map(lambda i: "%%var.%d" % i, itertools.count())
         self.block_names = map(lambda i: "block.%d" % i, itertools.count())
-        self.let_allocations = {}
         self.new_basic_block()
         self.scope = {}
 
@@ -106,13 +105,15 @@ class FunctionWriter:
 
     def alloca(self, ty):
         var = next(self.variable_names)
-        self.current_basic_block.instructions.append(
+        instruction = \
             CGASTNode(
                 'alloca',
                 ty = ty,
                 dst = var,
             )
-        )
+        first_basic_block = self.basic_blocks[0]
+        first_basic_block.instructions = \
+            [instruction] + first_basic_block.instructions
         return var
 
     def store(self, dst, ty, source):
@@ -532,22 +533,9 @@ class FunctionWriter:
         assert len(output) == 2, expr.tag
         return output
 
-    def generate_allocations(self, statement):
-        if statement.tag == 'let_statement':
-            llvm_type = self.generate_type(statement.ty)
-            self.let_allocations[id(statement)] = self.alloca(llvm_type)
-        elif statement.tag == 'if_statement':
-            for s in statement.true_side:
-                self.generate_allocations(s)
-            for s in statement.false_side:
-                self.generate_allocations(s)
-        elif statement.tag == 'loop_statement':
-            for statement in statement.body:
-                self.generate_allocations(statement)
-
     def generate_let_statement(self, statement):
         ty = self.generate_type(statement.ty)
-        ptr = self.let_allocations[id(statement)]
+        ptr = self.alloca(ty)
         self.scope[statement.name] = ty, ptr
         if statement.expr:
             _, value = self.generate_expression(statement.expr)
@@ -778,10 +766,6 @@ class CodeGenerator:
             arg_dict[arg_name] = llvm_type, arg_ptr
 
         function_writer.arg_dict = arg_dict
-
-        for statement in decl.body:
-            function_writer.generate_allocations(statement)
-
         function_writer.generate_statements(decl.body)
 
         self.functions[decl.name] = \
