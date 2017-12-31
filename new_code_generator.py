@@ -190,11 +190,12 @@ class FunctionWriter:
         )
         return dst
 
-    def zext(self, from_ty, to_ty, value):
+    def cast(self, mode, from_ty, to_ty, value):
         dst = next(self.variable_names)
         self.current_basic_block.instructions.append(
             CGASTNode(
-                'zext',
+                'cast',
+                mode = mode,
                 dst = dst,
                 from_ty = from_ty,
                 to_ty = to_ty,
@@ -202,45 +203,18 @@ class FunctionWriter:
             )
         )
         return dst
+
+    def zext(self, from_ty, to_ty, value):
+        return self.cast('zext', from_ty, to_ty, value)
 
     def sext(self, from_ty, to_ty, value):
-        dst = next(self.variable_names)
-        self.current_basic_block.instructions.append(
-            CGASTNode(
-                'sext',
-                dst = dst,
-                from_ty = from_ty,
-                to_ty = to_ty,
-                value = value,
-            )
-        )
-        return dst
+        return self.cast('sext', from_ty, to_ty, value)
 
     def truncate(self, from_ty, to_ty, value):
-        dst = next(self.variable_names)
-        self.current_basic_block.instructions.append(
-            CGASTNode(
-                'truncate',
-                dst = dst,
-                from_ty = from_ty,
-                to_ty = to_ty,
-                value = value,
-            )
-        )
-        return dst
+        return self.cast('trunc', from_ty, to_ty, value)
 
     def bitcast(self, from_ty, to_ty, value):
-        dst = next(self.variable_names)
-        self.current_basic_block.instructions.append(
-            CGASTNode(
-                'bitcast',
-                dst = dst,
-                from_ty = from_ty,
-                to_ty = to_ty,
-                value = value,
-            )
-        )
-        return dst
+        return self.cast('bitcast', from_ty, to_ty, value)
 
     def icmp(self, mode, ty, a, b):
         dst = next(self.variable_names)

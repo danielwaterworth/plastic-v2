@@ -244,25 +244,11 @@ class LLVMWriter:
             self.write(instruction.dst)
             self.write(" = alloca ")
             self.writeout_type(instruction.ty)
-        elif instruction.tag == 'zext':
+        elif instruction.tag == 'cast':
             self.write(instruction.dst)
-            self.write(" = zext ")
-            self.writeout_type(instruction.from_ty)
+            self.write(" = ")
+            self.write(instruction.mode)
             self.write(" ")
-            self.writeout_value(instruction.value)
-            self.write(" to ")
-            self.writeout_type(instruction.to_ty)
-        elif instruction.tag == 'sext':
-            self.write(instruction.dst)
-            self.write(" = sext ")
-            self.writeout_type(instruction.from_ty)
-            self.write(" ")
-            self.writeout_value(instruction.value)
-            self.write(" to ")
-            self.writeout_type(instruction.to_ty)
-        elif instruction.tag == 'truncate':
-            self.write(instruction.dst)
-            self.write(" = trunc ")
             self.writeout_type(instruction.from_ty)
             self.write(" ")
             self.writeout_value(instruction.value)
