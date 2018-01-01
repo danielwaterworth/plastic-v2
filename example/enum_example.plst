@@ -18,17 +18,17 @@ extern
       void
 
 define
-    main
-        = {
-            let b = foo();
-            match b {
-              foo() {
-                puts("foo\00");
-              }
-              bar(i) {
-                putint(i);
-              }
-            }
-            puts("end\00");
-            return void;
+  main
+    = {
+      let b = foo();
+      match b {
+        foo() {
+          puts("foo\00");
         }
+        bar(i) {
+          putint(i);
+        }
+      }
+      puts("end\00");
+      return void;
+    }
