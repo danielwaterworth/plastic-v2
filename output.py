@@ -1,10 +1,11 @@
 import sys
 
+import cps_conversion
+import importer
 import lexer
+import new_code_generator
 import plst_parser
 import type_checker
-import new_code_generator
-import cps_conversion
 
 class LLVMWriter:
     def __init__(self, fd):
@@ -327,23 +328,43 @@ class LLVMWriter:
         for decl in decls:
             self.writeout_decl(decl)
 
-with open(sys.argv[1], 'r') as fd:
-    src = fd.read()
+def parse(src):
+    tokens = lexer.Lexer(src).lex()
+    return plst_parser.Parser(tokens).parse_file()
 
-tokens = lexer.Lexer(src).lex()
-decls = plst_parser.Parser(tokens).parse_file()
+checked_module_interfaces = {}
+checked_decls = {}
+modules = importer.Importer(parse).load_all(sys.argv[1])
 
-env = \
+global_env = \
     type_checker.Environment(
         type_checker.global_type_environment,
         type_checker.global_term_environment,
     )
-type_checked_decls = env.check_top_level_decls(decls)
 
-llvm_decls = new_code_generator.CodeGenerator().generate(type_checked_decls)
-# llvm_decls = cps_conversion.CPSConvertor().convert(llvm_decls)
+for module_name, decls in modules:
+    env = \
+        type_checker.Environment(
+            {},
+            {},
+            global_env,
+            modules = checked_module_interfaces,
+        )
+    decls = env.check_top_level_decls(decls)
+    checked_module_interfaces[module_name] = \
+        type_checker.ModuleInterface(
+            env.term_bindings,
+            env.type_bindings,
+        )
+    checked_decls[module_name] = decls
+
+code_generator = new_code_generator.CodeGenerator()
+
+for module_name, _ in modules:
+    type_checked_decls = checked_decls[module_name]
+    code_generator.generate(module_name, type_checked_decls)
 
 with open(sys.argv[2], 'w') as fd:
     writer = LLVMWriter(fd)
     writer.writeout_prelude()
-    writer.writeout_decls(llvm_decls)
+    writer.writeout_decls(code_generator.get_decls())

@@ -92,6 +92,7 @@ class FunctionWriter:
         self.block_names = map(lambda i: "block.%d" % i, itertools.count())
         self.new_basic_block()
         self.scope = {}
+        self.arg_dict = {}
 
     def new_basic_block(self):
         self.current_basic_block = \
@@ -326,11 +327,16 @@ class FunctionWriter:
     def generate_yield_expression(self, expr):
         raise NotImplementedError()
 
-    def generate_field_access(self, expr):
+    def generate_struct_field_access(self, expr):
         struct_ty, value = self.generate_expression(expr.x)
         field = expr.field
         index, field_ty = self.code_generator.structs[struct_ty.name][field]
         return field_ty, self.extractvalue(struct_ty, value, [index])
+
+    def generate_module_field_access(self, expr):
+        struct_ty, value = self.generate_expression(expr.x)
+        field = expr.field
+        raise NotImplementedError()
 
     def generate_character_literal(self, expr):
         raise NotImplementedError()
@@ -415,8 +421,10 @@ class FunctionWriter:
             output = self.generate_application(expr)
         elif expr.tag == 'yield_expression':
             output = self.generate_yield_expression(expr)
-        elif expr.tag == 'field_access':
-            output = self.generate_field_access(expr)
+        elif expr.tag == 'struct_field_access':
+            output = self.generate_struct_field_access(expr)
+        elif expr.tag == 'module_field_access':
+            output = self.generate_module_field_access(expr)
         elif expr.tag == 'character_literal':
             output = self.generate_character_literal(expr)
         elif expr.tag == 'cast':
@@ -682,6 +690,7 @@ class CodeGenerator:
         self.structs = {}
         self.enums = {}
         self.constructor_tags = {}
+        self.decls = []
 
     def global_string_constant(self, string):
         value = next(self.string_names)
@@ -719,7 +728,7 @@ class CodeGenerator:
     def generate_type_list(self, tys):
         return [self.generate_type(ty) for ty in tys]
 
-    def generate_extern(self, decl):
+    def generate_extern(self, module_name, decl):
         return_type = self.generate_type(decl.return_type)
         arg_types = self.generate_type_list(decl.arg_types)
 
@@ -735,7 +744,7 @@ class CodeGenerator:
             )
         ]
 
-    def generate_struct(self, decl):
+    def generate_struct(self, module_name, decl):
         fields = \
             [(name, self.generate_type(ty)) for name, ty in decl.fields]
 
@@ -868,7 +877,7 @@ class CodeGenerator:
                 linkage = [],
             )
 
-    def generate_enum(self, decl):
+    def generate_enum(self, module_name, decl):
         constructors = \
             [(name, self.generate_type_list(types))
              for name, types in decl.constructors]
@@ -903,7 +912,7 @@ class CodeGenerator:
                    )
                ] + constructor_structs + constructor_functions
 
-    def generate_function(self, decl):
+    def generate_function(self, module_name, decl):
         return_type = self.generate_type(decl.return_type)
         function_writer = FunctionWriter(self)
         args = []
@@ -934,7 +943,7 @@ class CodeGenerator:
             ),
         ]
 
-    def generate_constant(self, decl):
+    def generate_constant(self, module_name, decl):
         function_name = next(self.function_names)
         function_writer = FunctionWriter(self)
         ty, value = function_writer.generate_expression(decl.expr)
@@ -958,25 +967,31 @@ class CodeGenerator:
             ),
         ]
 
-    def generate_decl(self, decl):
+    def generate_decl(self, module_name, decl):
         if decl.tag == 'extern':
-            return self.generate_extern(decl)
+            return self.generate_extern(module_name, decl)
         elif decl.tag == 'struct':
-            return self.generate_struct(decl)
+            return self.generate_struct(module_name, decl)
         elif decl.tag == 'enum':
-            return self.generate_enum(decl)
+            return self.generate_enum(module_name, decl)
         elif decl.tag == 'function':
-            return self.generate_function(decl)
+            return self.generate_function(module_name, decl)
         elif decl.tag == 'constant':
-            return self.generate_constant(decl)
+            return self.generate_constant(module_name, decl)
+        elif decl.tag == 'import':
+            return []
         raise NotImplementedError()
 
-    def generate(self, decls):
+    def generate(self, module_name, decls):
+        self.decls.extend(
+            concat([self.generate_decl(module_name, decl) for decl in decls])
+        )
+
+    def get_decls(self):
         constructors = [
             CGASTNode(
                 'global_constructors',
                 funcs = self.initializers,
             ),
         ]
-        llvm_decls = concat([self.generate_decl(decl) for decl in decls])
-        return self.strings + llvm_decls + constructors
+        return self.strings + self.decls + constructors

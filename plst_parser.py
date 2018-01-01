@@ -599,6 +599,14 @@ class Parser:
                 expr = expr,
             )
 
+    def parse_import(self):
+        module = self.parse_identifier()
+        return \
+            ASTNode(
+                'import',
+                module = module,
+            )
+
     def parse_top_level_decl(self):
         type = self.parse_keyword()
         if type == 'enum':
@@ -611,6 +619,8 @@ class Parser:
             return self.parse_extern()
         elif type == 'constant':
             return self.parse_constant()
+        elif type == 'import':
+            return self.parse_import()
         else:
             raise ParseError('unknown top-level entity: %s' % type)
 

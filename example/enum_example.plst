@@ -20,7 +20,7 @@ extern
 define
   main
     = {
-      let b = foo();
+      let b = bar(5);
       match b {
         foo() {
           puts("foo\00");

@@ -232,8 +232,28 @@ class TypedASTNode:
     def __repr__(self):
         return "TypedASTNode(%s, %s)" % (repr(self.tag), repr(self.attributes))
 
+class ModuleKind(Kind):
+    def __eq__(self, other):
+        return type(other) == ModuleKind
+
+module_kind = ModuleKind()
+
+class ModuleType(TypeLevelExpr):
+    kind = module_kind
+
+    def __init__(self, name, interface):
+        self.name = name
+        self.values = interface.values
+        self.types = interface.types
+
+class ModuleInterface:
+    def __init__(self, values, types):
+        self.values = values
+        self.types = types
+
 class Environment:
-    def __init__(self, type_bindings, term_bindings, parent=None, product_type=None, consume_type=None, return_type=None):
+    def __init__(self, type_bindings, term_bindings, parent=None, product_type=None, consume_type=None, return_type=None, modules={}):
+        self.modules = modules
         self.type_bindings = type_bindings
         self.term_bindings = term_bindings
         self.parent = parent
@@ -387,18 +407,29 @@ class Environment:
                 )
         elif expr.tag == 'field_access':
             x = self.check_expression(expr.x)
-            if type(x.ty) != StructType:
+            if type(x.ty) == ModuleType:
+                if not expr.field in x.ty.values:
+                    raise TypeError()
+                return \
+                    TypedASTNode(
+                        'module_field_access',
+                        x = x,
+                        field = expr.field,
+                        ty = x.ty.values[expr.field],
+                    )
+            elif type(x.ty) != StructType:
+                if not expr.field in x.ty.fields:
+                    raise TypeError()
+                return \
+                    TypedASTNode(
+                        'struct_field_access',
+                        x = x,
+                        field = expr.field,
+                        ty = x.ty.fields[expr.field],
+                    )
+            else:
                 print(x.ty)
                 raise TypeError()
-            if not expr.field in x.ty.fields:
-                raise TypeError()
-            return \
-                TypedASTNode(
-                    'field_access',
-                    x = x,
-                    field = expr.field,
-                    ty = x.ty.fields[expr.field],
-                )
         elif expr.tag == 'cast':
             to_cast = self.check_expression(expr.expr)
             from_ty = to_cast.ty
@@ -884,6 +915,15 @@ class Environment:
                 expr = expr,
             )
 
+    def check_import(self, decl):
+        self.term_bindings[decl.module] = \
+            ModuleType(decl.module, self.modules[decl.module])
+        return \
+            TypedASTNode(
+                'import',
+                module = decl.module,
+            )
+
     def check_top_level_decl(self, decl):
         if decl.tag == 'extern':
             return self.check_extern(decl)
@@ -895,6 +935,8 @@ class Environment:
             return self.check_function(decl)
         elif decl.tag == 'constant':
             return self.check_constant(decl)
+        elif decl.tag == 'import':
+            return self.check_import(decl)
         raise NotImplementedError()
 
     def check_top_level_decls(self, decls):

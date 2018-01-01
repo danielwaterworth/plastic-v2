@@ -22,6 +22,7 @@ keywords = {
     'enum',
     'extern',
     'if',
+    'import',
     'let',
     'loop',
     'match',
