@@ -582,6 +582,7 @@ class CodeGenerator:
         self.constants = {}
         self.initializers = []
         self.structs = {}
+        self.enums = {}
 
     def global_string_constant(self, string):
         value = next(self.string_names)
@@ -683,8 +684,85 @@ class CodeGenerator:
             ),
         ]
 
+    def size_of(self, ty):
+        if ty.tag == 'ptr_to':
+            return 8
+        elif ty.tag == 'number':
+            return ty.width // 8
+        elif ty.tag == 'named_type':
+            if ty.name in self.structs:
+                fields = self.structs[ty.name]
+                return sum([self.size_of(ty) for _, ty in fields])
+            if ty.name in self.enums:
+                constructors = self.enums[ty.name]
+                return self.calculate_enum_size(constructors)
+        print(ty)
+        raise NotImplementedError()
+
+    def calculate_enum_size(self, constructors):
+        size = 0
+        for name, types in constructors:
+            constructor_size = 0
+            for ty in types:
+                constructor_size += self.size_of(ty)
+            size = max(size, constructor_size)
+        return size
+
+    def generate_constructor_struct(self, name, types):
+        return \
+            CGASTNode(
+                'struct',
+                name = name,
+                fields = types,
+            )
+
+    def generate_constructor_function(self, enum_name, name, types):
+        args = list(zip(types, map(lambda i: "%%arg.%d" % i, itertools.count())))
+        function_writer = FunctionWriter(self)
+        return_type = named_type(enum_name)
+        ptr = function_writer.alloca(return_type)
+        output = function_writer.load(return_type, ptr)
+        function_writer.current_basic_block.terminator = return_(return_type, output)
+        return \
+            CGASTNode(
+                'define',
+                name = '@'+name,
+                return_type = return_type,
+                args = args,
+                basic_blocks = function_writer.basic_blocks,
+                linkage = [],
+            )
+
     def generate_enum(self, decl):
-        return []
+        constructors = \
+            [(name, self.generate_type_list(types))
+             for name, types in decl.constructors]
+        assert len(constructors) <= 256
+
+        constructor_structs = \
+            [self.generate_constructor_struct(name, types)
+             for name, types in constructors]
+
+        constructor_functions = \
+            [self.generate_constructor_function(decl.name, name, types)
+             for name, types in constructors]
+
+        self.enums[decl.name] = constructors
+        size = self.calculate_enum_size(constructors)
+        return [
+                   CGASTNode(
+                       'struct',
+                       name = decl.name,
+                       fields = [
+                           byte,
+                           CGASTNode(
+                               'array',
+                               size = size,
+                               of = byte,
+                           )
+                       ],
+                   )
+               ] + constructor_structs + constructor_functions
 
     def generate_function(self, decl):
         return_type = self.generate_type(decl.return_type)

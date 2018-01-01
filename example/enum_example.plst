@@ -1,0 +1,11 @@
+enum
+  test
+    foo(),
+    bar(u32),
+
+
+define
+    main
+        = {
+            #let b = foo();
+        }
