@@ -29,4 +29,6 @@ define
                 putint(i);
               }
             }
+            puts("foo\00");
+            return void;
         }

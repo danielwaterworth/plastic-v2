@@ -716,6 +716,7 @@ class Environment:
                 statement = \
                     TypedASTNode(
                         'match',
+                        expr = expr,
                         matches = matches,
                     )
                 new_env = self
