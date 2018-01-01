@@ -304,14 +304,17 @@ class FunctionWriter:
         struct_ty, ptr = self.generate_l_expr(expr.l_expr)
         field = expr.field
         index, field_ty = self.code_generator.structs[struct_ty.ty.name][field]
-        return ptr_to(field_ty), self.getelementptr(struct_ty.ty, struct_ty, ptr, ['0', str(index)])
+        field_ptr = \
+            self.getelementptr(struct_ty.ty, struct_ty, ptr, ['0', str(index)])
+        return ptr_to(field_ty), field_ptr
 
     def generate_array_access(self, expr):
         array_ty, value = self.generate_expression(expr.expr)
         index_ty, index = self.generate_expression(expr.index)
         ptr = self.alloca(array_ty)
         self.store(ptr, array_ty, value)
-        element_ptr = self.getelementptr(array_ty, ptr_to(array_ty), ptr, ['0', index])
+        element_ptr = \
+            self.getelementptr(array_ty, ptr_to(array_ty), ptr, ['0', index])
         return array_ty.of, self.load(array_ty.of, element_ptr)
 
     def generate_application(self, expr):
@@ -569,8 +572,10 @@ class FunctionWriter:
             body_block = self.current_basic_block
             self.generate_pattern_variables(pattern, ptr, ty)
             self.generate_statements(body)
-            self.current_basic_block.terminator = unconditional_branch(after_block.label)
-            pattern_block.terminator = conditional_branch(cond, body_block.label, next_block.label)
+            self.current_basic_block.terminator = \
+                unconditional_branch(after_block.label)
+            pattern_block.terminator = \
+                conditional_branch(cond, body_block.label, next_block.label)
             next_block = pattern_block
         prev.terminator = unconditional_branch(next_block.label)
         self.current_basic_block = after_block
@@ -581,11 +586,25 @@ class FunctionWriter:
         elif pattern.tag == 'constructor':
             constructor_ptr = self.getelementptr(ty, ptr_to(ty), ptr, ["0", "1"])
             constructor_ty = named_type(pattern.name)
-            size = self.code_generator.calculate_enum_size(self.code_generator.enums[pattern.ty.name])
-            data_ptr = self.bitcast(ptr_to(array_of(byte, size)), constructor_ty, constructor_ptr)
+            size = \
+                self.code_generator.calculate_enum_size(
+                    self.code_generator.enums[pattern.ty.name]
+                )
+            data_ptr = \
+                self.bitcast(
+                    ptr_to(array_of(byte, size)),
+                    constructor_ty,
+                    constructor_ptr
+                )
             for i, arg in enumerate(pattern.args):
                 arg_ty = self.generate_type(arg.ty)
-                arg_ptr = self.getelementptr(constructor_ty, ptr_to(constructor_ty), data_ptr, ["0", str(i)])
+                arg_ptr = \
+                    self.getelementptr(
+                        constructor_ty,
+                        ptr_to(constructor_ty),
+                        data_ptr,
+                        ["0", str(i)]
+                    )
                 self.generate_pattern_variables(arg, arg_ptr, arg_ty)
         else:
             raise NotImplementedError()
@@ -594,17 +613,33 @@ class FunctionWriter:
         if pattern.tag == 'wildcard':
             return '1'
         elif pattern.tag == 'constructor':
-            expected_tag = str(self.code_generator.constructor_tags[pattern.ty.name][pattern.name])
+            constructor_tags = self.code_generator.constructor_tags
+            expected_tag = str(constructor_tags[pattern.ty.name][pattern.name])
             tag_ptr = self.getelementptr(ty, ptr_to(ty), ptr, ["0", "0"])
             actual_tag = self.load(byte, tag_ptr)
             output = self.icmp('eq', byte, expected_tag, actual_tag)
-            constructor_ptr = self.getelementptr(ty, ptr_to(ty), ptr, ["0", "1"])
+            constructor_ptr = \
+                self.getelementptr(ty, ptr_to(ty), ptr, ["0", "1"])
             constructor_ty = named_type(pattern.name)
-            size = self.code_generator.calculate_enum_size(self.code_generator.enums[pattern.ty.name])
-            data_ptr = self.bitcast(ptr_to(array_of(byte, size)), constructor_ty, constructor_ptr)
+            size = \
+                self.code_generator.calculate_enum_size(
+                    self.code_generator.enums[pattern.ty.name],
+                )
+            data_ptr = \
+                self.bitcast(
+                    ptr_to(array_of(byte, size)),
+                    constructor_ty,
+                    constructor_ptr,
+                )
             for i, arg in enumerate(pattern.args):
                 arg_ty = self.generate_type(arg.ty)
-                arg_ptr = self.getelementptr(constructor_ty, ptr_to(constructor_ty), data_ptr, ["0", str(i)])
+                arg_ptr = \
+                    self.getelementptr(
+                        constructor_ty,
+                        ptr_to(constructor_ty),
+                        data_ptr,
+                        ["0", str(i)],
+                    )
                 res = self.generate_pattern(arg, arg_ptr, arg_ty)
                 output = self.binop('and', output, res, boolean)
             return output
@@ -638,7 +673,8 @@ class FunctionWriter:
 class CodeGenerator:
     def __init__(self):
         self.string_names = map(lambda i: "@string.%d" % i, itertools.count())
-        self.function_names = map(lambda i: "@function.%d" % i, itertools.count())
+        self.function_names = \
+            map(lambda i: "@function.%d" % i, itertools.count())
         self.strings = []
         self.functions = {}
         self.constants = {}
@@ -779,22 +815,47 @@ class CodeGenerator:
                 fields = types,
             )
 
-    def generate_constructor_function(self, enum_name, name, constructor_tag, types):
-        args = list(zip(types, map(lambda i: "%%arg.%d" % i, itertools.count())))
+    def generate_constructor_function(self, enum_name, name, tag, types):
+        args = \
+            list(zip(types, map(lambda i: "%%arg.%d" % i, itertools.count())))
         function_writer = FunctionWriter(self)
         return_type = named_type(enum_name)
         ptr = function_writer.alloca(return_type)
-        tag_ptr = function_writer.getelementptr(return_type, ptr_to(return_type), ptr, ["0", "0"])
-        function_writer.store(tag_ptr, byte, str(constructor_tag))
-        data_ptr = function_writer.getelementptr(return_type, ptr_to(return_type), ptr, ["0", "1"])
+        tag_ptr = \
+            function_writer.getelementptr(
+                return_type,
+                ptr_to(return_type),
+                ptr,
+                ["0", "0"]
+            )
+        function_writer.store(tag_ptr, byte, str(tag))
+        data_ptr = \
+            function_writer.getelementptr(
+                return_type,
+                ptr_to(return_type),
+                ptr,
+                ["0", "1"]
+            )
         size = self.calculate_enum_size(self.enums[enum_name])
         enum_data_type = named_type(name)
-        data_ptr = function_writer.bitcast(ptr_to(array_of(byte, size)), enum_data_type, data_ptr)
+        data_ptr = \
+            function_writer.bitcast(
+                ptr_to(array_of(byte, size)),
+                enum_data_type,
+                data_ptr
+            )
         for index, (type, arg_name) in enumerate(args):
-            field_ptr = function_writer.getelementptr(enum_data_type, ptr_to(enum_data_type), data_ptr, ["0", str(index)])
+            field_ptr = \
+                function_writer.getelementptr(
+                    enum_data_type,
+                    ptr_to(enum_data_type),
+                    data_ptr,
+                    ["0", str(index)]
+                )
             function_writer.store(field_ptr, type, arg_name)
         output = function_writer.load(return_type, ptr)
-        function_writer.current_basic_block.terminator = return_(return_type, output)
+        function_writer.current_basic_block.terminator = \
+            return_(return_type, output)
         self.functions[name] = \
             ptr_to(func(types, return_type)), '@' + name
         return \
@@ -825,8 +886,8 @@ class CodeGenerator:
             self.constructor_tags[decl.name][name] = constructor_tag
 
         constructor_functions = \
-            [self.generate_constructor_function(decl.name, name, constructor_tag, types)
-             for constructor_tag, (name, types) in enumerate(constructors)]
+            [self.generate_constructor_function(decl.name, name, tag, types)
+             for tag, (name, types) in enumerate(constructors)]
         return [
                    CGASTNode(
                        'struct',
