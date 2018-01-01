@@ -727,11 +727,13 @@ class CodeGenerator:
         size = self.calculate_enum_size(self.enums[enum_name])
         enum_data_type = named_type(name)
         data_ptr = function_writer.bitcast(ptr_to(array_of(byte, size)), enum_data_type, data_ptr)
-        for index, (type, name) in enumerate(args):
+        for index, (type, arg_name) in enumerate(args):
             field_ptr = function_writer.getelementptr(enum_data_type, ptr_to(enum_data_type), data_ptr, ["0", str(index)])
-            function_writer.store(field_ptr, type, name)
+            function_writer.store(field_ptr, type, arg_name)
         output = function_writer.load(return_type, ptr)
         function_writer.current_basic_block.terminator = return_(return_type, output)
+        self.functions[name] = \
+            ptr_to(func(types, return_type)), '@' + name
         return \
             CGASTNode(
                 'define',

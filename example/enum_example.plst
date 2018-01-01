@@ -7,5 +7,5 @@ enum
 define
     main
         = {
-            #let b = foo();
+            let b = bar(5);
         }
