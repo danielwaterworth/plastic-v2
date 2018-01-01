@@ -315,7 +315,7 @@ class Environment:
         for name, args in constructors:
             self.term_bindings[name] = \
                 FunctionType('plastic', args, enum_type)
-        enum_type.constructors = constructors
+        enum_type.constructors = dict(constructors)
         return \
             TypedASTNode(
                 'enum',
@@ -710,10 +710,67 @@ class Environment:
                         ty = void,
                     )
                 new_env = self
+            elif first_statement.tag == 'match':
+                expr = self.check_expression(first_statement.expr)
+                matches = self.check_matches(expr.ty, first_statement.matches)
+                statement = \
+                    TypedASTNode(
+                        'match',
+                        matches = matches,
+                    )
+                new_env = self
             else:
                 print(first_statement.tag)
                 raise NotImplementedError()
             return [statement] + new_env.check_body(rest)
+
+    def check_constructor_pattern(self, enum_type, pattern):
+        if type(enum_type) != EnumType:
+            raise TypeError()
+        constructor = enum_type.constructors[pattern.name]
+        if len(pattern.args) != len(constructor):
+            raise TypeError()
+        new_env = self
+        args = []
+        for arg_type, arg_pattern in zip(constructor, pattern.args):
+            new_env, arg_pattern = new_env.check_pattern(arg_type, arg_pattern)
+            args.append(arg_pattern)
+        pattern = \
+            TypedASTNode(
+                'constructor',
+                name = pattern.name,
+                args = args,
+                ty = enum_type,
+            )
+        return new_env, pattern
+
+    def check_wildcard_pattern(self, enum_type, pattern):
+        new_env = Environment({}, {pattern.name: enum_type}, self)
+        pattern = \
+            TypedASTNode(
+                'wildcard',
+                name = pattern.name,
+                ty = enum_type,
+            )
+        return new_env, pattern
+
+    def check_pattern(self, enum_type, pattern):
+        if pattern.tag == 'wildcard':
+            return self.check_wildcard_pattern(enum_type, pattern)
+        elif pattern.tag == 'constructor':
+            return self.check_constructor_pattern(enum_type, pattern)
+        else:
+            raise NotImplementedError()
+
+    def check_match(self, enum_type, pattern, body):
+        new_env, pattern = self.check_pattern(enum_type, pattern)
+        body = new_env.check_body(body)
+        return (pattern, body)
+
+    def check_matches(self, enum_type, matches):
+        return \
+            [self.check_match(enum_type, pattern, body)
+                for pattern, body in matches]
 
     def check_l_expression(self, l_expr):
         if l_expr.tag == 'variable':

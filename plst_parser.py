@@ -295,6 +295,32 @@ class Parser:
     def parse_expression(self):
         return self.parse_expression_7()
 
+    def parse_pattern(self):
+        name = self.parse_identifier()
+        if self.next.tag == 'open_paren':
+            self.advance()
+            args = []
+            if self.next.tag != 'close_paren':
+                match = self.parse_pattern()
+                args.append(match)
+                while self.next.tag != 'close_paren':
+                    self.expect('comma')
+                    match = self.parse_pattern()
+                    args.append(match)
+            self.expect('close_paren')
+            return \
+                ASTNode(
+                    'constructor',
+                    name = name,
+                    args = args,
+                )
+        else:
+            return \
+                ASTNode(
+                    'wildcard',
+                    name = name,
+                )
+
     def parse_let_statement(self):
         self.expect_keyword('let')
         name = self.parse_identifier()
@@ -415,6 +441,19 @@ class Parser:
         self.expect('semicolon')
         return ASTNode('return', expr = expr)
 
+    def parse_match_statement(self):
+        self.expect_keyword('match')
+        expr = self.parse_expression()
+        self.expect('open_brace')
+        matches = []
+        while self.next.tag != 'close_brace':
+            pattern = self.parse_pattern()
+            self.expect('open_brace')
+            body = self.parse_body()
+            matches.append((pattern, body))
+        self.expect('close_brace')
+        return ASTNode('match', expr = expr, matches = matches)
+
     def try_(self, func):
         self.save()
         try:
@@ -437,6 +476,8 @@ class Parser:
                 return self.parse_break()
             elif self.next.keyword == 'return':
                 return self.parse_return()
+            elif self.next.keyword == 'match':
+                return self.parse_match_statement()
 
         statement = self.try_(self.parse_assignment)
         if statement:

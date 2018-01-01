@@ -1,11 +1,32 @@
 enum
   test
     foo(),
-    bar(u32),
+    bar(i32),
 
+extern
+  puts
+    <-
+      ptr(i8),
+    ->
+      void
+
+extern
+  putint
+    <-
+      i32,
+    ->
+      void
 
 define
     main
         = {
-            let b = bar(5);
+            let b = foo();
+            match b {
+              foo() {
+                puts("foo\00");
+              }
+              bar(i) {
+                putint(i);
+              }
+            }
         }

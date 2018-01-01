@@ -16,6 +16,7 @@ symbol_chars = '!<>+-=/|'
 keywords = {
     'as',
     'break',
+    'constant',
     'define',
     'else',
     'enum',
@@ -23,10 +24,10 @@ keywords = {
     'if',
     'let',
     'loop',
+    'match',
     'return',
     'struct',
     'yield',
-    'constant',
 }
 
 special_symbols = {
