@@ -593,7 +593,7 @@ class FunctionWriter:
             data_ptr = \
                 self.bitcast(
                     ptr_to(array_of(byte, size)),
-                    constructor_ty,
+                    ptr_to(constructor_ty),
                     constructor_ptr
                 )
             for i, arg in enumerate(pattern.args):
@@ -628,7 +628,7 @@ class FunctionWriter:
             data_ptr = \
                 self.bitcast(
                     ptr_to(array_of(byte, size)),
-                    constructor_ty,
+                    ptr_to(constructor_ty),
                     constructor_ptr,
                 )
             for i, arg in enumerate(pattern.args):
@@ -841,7 +841,7 @@ class CodeGenerator:
         data_ptr = \
             function_writer.bitcast(
                 ptr_to(array_of(byte, size)),
-                enum_data_type,
+                ptr_to(enum_data_type),
                 data_ptr
             )
         for index, (type, arg_name) in enumerate(args):
