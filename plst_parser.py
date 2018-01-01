@@ -321,7 +321,7 @@ class Parser:
     def parse_else(self):
         self.expect_keyword('else')
         self.expect('open_brace')
-        false_side = self.parse_body()
+        return self.parse_body()
 
     def parse_if_statement(self):
         self.expect_keyword('if')

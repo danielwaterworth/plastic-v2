@@ -220,6 +220,13 @@ extern
     ->
       void
 
+extern
+  putu64
+    <-
+      u64,
+    ->
+      void
+
 struct
   chunk_t
     data: ptr(i8),
@@ -321,10 +328,19 @@ define
           let event = events[i];
           i = i + 1;
 
-          let fd = (event.data as u32) as i32;
+          let fd = event.data as i32;
           if (event.events & epollin != 0) {
-            puts("fd\00");
-            putint(fd);
+            if (fd == accept_sock) {
+              puts("new connection available\00");
+              let new_connection = accept(accept_sock, null, null);
+              let event = epoll_event(epollin, new_connection as u64);
+              epoll_ctl(epoll_sock, epoll_ctl_add, new_connection, &event);
+            } else {
+              puts("connection ready to read\00");
+              let buffer: [1024 x u8];
+              let length_received = recv(fd, &buffer[0], 1000, msg_dontwait);
+              putint(fd);
+            }
           }
         }
       }
@@ -338,6 +354,8 @@ define
         if (i >= 5) {
           puts("breaking\00");
           break;
+        } else {
+          puts("not breaking\00");
         }
         putint(i);
         i = i + 1;
@@ -360,7 +378,9 @@ define
         return void;
       }
 
-      let event = epoll_event(epollin, 0);
+      let event = epoll_event(epollin, accept_sock as u64);
+      putint(accept_sock);
+      putu64(accept_sock as u64);
       epoll_ctl(epoll_sock, epoll_ctl_add, accept_sock, &event);
 
       main_loop(accept_sock, epoll_sock);

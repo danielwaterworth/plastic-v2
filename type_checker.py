@@ -98,6 +98,9 @@ class NumberType(TypeLevelExpr):
             self.signed == other.signed and \
             self.width == other.width
 
+    def __repr__(self):
+        return "NumberType(%s, %d)" % (str(self.signed), self.width)
+
 class OpaqueNumberType(TypeLevelExpr):
     kind = star
 
