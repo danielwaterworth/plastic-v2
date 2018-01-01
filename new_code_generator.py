@@ -716,11 +716,20 @@ class CodeGenerator:
                 fields = types,
             )
 
-    def generate_constructor_function(self, enum_name, name, types):
+    def generate_constructor_function(self, enum_name, name, constructor_tag, types):
         args = list(zip(types, map(lambda i: "%%arg.%d" % i, itertools.count())))
         function_writer = FunctionWriter(self)
         return_type = named_type(enum_name)
         ptr = function_writer.alloca(return_type)
+        tag_ptr = function_writer.getelementptr(return_type, ptr_to(return_type), ptr, ["0", "0"])
+        function_writer.store(tag_ptr, byte, str(constructor_tag))
+        data_ptr = function_writer.getelementptr(return_type, ptr_to(return_type), ptr, ["0", "1"])
+        size = self.calculate_enum_size(self.enums[enum_name])
+        enum_data_type = named_type(name)
+        data_ptr = function_writer.bitcast(ptr_to(array_of(byte, size)), enum_data_type, data_ptr)
+        for index, (type, name) in enumerate(args):
+            field_ptr = function_writer.getelementptr(enum_data_type, ptr_to(enum_data_type), data_ptr, ["0", str(index)])
+            function_writer.store(field_ptr, type, name)
         output = function_writer.load(return_type, ptr)
         function_writer.current_basic_block.terminator = return_(return_type, output)
         return \
@@ -743,12 +752,12 @@ class CodeGenerator:
             [self.generate_constructor_struct(name, types)
              for name, types in constructors]
 
-        constructor_functions = \
-            [self.generate_constructor_function(decl.name, name, types)
-             for name, types in constructors]
-
         self.enums[decl.name] = constructors
         size = self.calculate_enum_size(constructors)
+
+        constructor_functions = \
+            [self.generate_constructor_function(decl.name, name, constructor_tag, types)
+             for constructor_tag, (name, types) in enumerate(constructors)]
         return [
                    CGASTNode(
                        'struct',
