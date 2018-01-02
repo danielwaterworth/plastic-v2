@@ -336,10 +336,10 @@ define
               let event = epoll_event(epollin, new_connection as u64);
               epoll_ctl(epoll_sock, epoll_ctl_add, new_connection, &event);
             } else {
-              puts("connection ready to read\00");
-              let buffer: [1024 x u8];
-              let length_received = recv(fd, &buffer[0], 1000, msg_dontwait);
-              putint(fd);
+              # puts("connection ready to read\00");
+              # let buffer: array(u8, 1024);
+              # let length_received = recv(fd, &buffer[0], 1000, msg_dontwait);
+              # putint(fd);
             }
           }
         }

@@ -691,6 +691,7 @@ class CodeGenerator:
         self.enums = {}
         self.constructor_tags = {}
         self.decls = []
+        self.module_name = ""
 
     def global_string_constant(self, string):
         value = next(self.string_names)
@@ -728,7 +729,7 @@ class CodeGenerator:
     def generate_type_list(self, tys):
         return [self.generate_type(ty) for ty in tys]
 
-    def generate_extern(self, module_name, decl):
+    def generate_extern(self, decl):
         return_type = self.generate_type(decl.return_type)
         arg_types = self.generate_type_list(decl.arg_types)
 
@@ -744,7 +745,7 @@ class CodeGenerator:
             )
         ]
 
-    def generate_struct(self, module_name, decl):
+    def generate_struct(self, decl):
         fields = \
             [(name, self.generate_type(ty)) for name, ty in decl.fields]
 
@@ -800,7 +801,7 @@ class CodeGenerator:
         elif ty.tag == 'named_type':
             if ty.name in self.structs:
                 fields = self.structs[ty.name]
-                return sum([self.size_of(ty) for _, ty in fields])
+                return sum([self.size_of(ty) for _, ty in fields.values()])
             if ty.name in self.enums:
                 constructors = self.enums[ty.name]
                 return self.calculate_enum_size(constructors)
@@ -877,7 +878,7 @@ class CodeGenerator:
                 linkage = [],
             )
 
-    def generate_enum(self, module_name, decl):
+    def generate_enum(self, decl):
         constructors = \
             [(name, self.generate_type_list(types))
              for name, types in decl.constructors]
@@ -912,7 +913,7 @@ class CodeGenerator:
                    )
                ] + constructor_structs + constructor_functions
 
-    def generate_function(self, module_name, decl):
+    def generate_function(self, decl):
         return_type = self.generate_type(decl.return_type)
         function_writer = FunctionWriter(self)
         args = []
@@ -943,7 +944,7 @@ class CodeGenerator:
             ),
         ]
 
-    def generate_constant(self, module_name, decl):
+    def generate_constant(self, decl):
         function_name = next(self.function_names)
         function_writer = FunctionWriter(self)
         ty, value = function_writer.generate_expression(decl.expr)
@@ -967,24 +968,25 @@ class CodeGenerator:
             ),
         ]
 
-    def generate_decl(self, module_name, decl):
+    def generate_decl(self, decl):
         if decl.tag == 'extern':
-            return self.generate_extern(module_name, decl)
+            return self.generate_extern(decl)
         elif decl.tag == 'struct':
-            return self.generate_struct(module_name, decl)
+            return self.generate_struct(decl)
         elif decl.tag == 'enum':
-            return self.generate_enum(module_name, decl)
+            return self.generate_enum(decl)
         elif decl.tag == 'function':
-            return self.generate_function(module_name, decl)
+            return self.generate_function(decl)
         elif decl.tag == 'constant':
-            return self.generate_constant(module_name, decl)
+            return self.generate_constant(decl)
         elif decl.tag == 'import':
             return []
         raise NotImplementedError()
 
     def generate(self, module_name, decls):
+        self.module_name = module_name
         self.decls.extend(
-            concat([self.generate_decl(module_name, decl) for decl in decls])
+            concat([self.generate_decl(decl) for decl in decls])
         )
 
     def get_decls(self):

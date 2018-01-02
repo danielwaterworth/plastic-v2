@@ -417,7 +417,7 @@ class Environment:
                         field = expr.field,
                         ty = x.ty.values[expr.field],
                     )
-            elif type(x.ty) != StructType:
+            elif type(x.ty) == StructType:
                 if not expr.field in x.ty.fields:
                     raise TypeError()
                 return \
@@ -947,6 +947,7 @@ global_type_environment = {
     'ptr': ptr,
     'array': array,
     'i8': char,
+    'u8': NumberType(False, 8),
     'i16': NumberType(True, 16),
     'i32': NumberType(True, 32),
     'u32': NumberType(False, 32),

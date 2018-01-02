@@ -358,13 +358,13 @@ for module_name, decls in modules:
         )
     checked_decls[module_name] = decls
 
-code_generator = new_code_generator.CodeGenerator()
+cg = new_code_generator.CodeGenerator()
 
 for module_name, _ in modules:
     type_checked_decls = checked_decls[module_name]
-    code_generator.generate(module_name, type_checked_decls)
+    cg.generate(module_name, type_checked_decls)
 
 with open(sys.argv[2], 'w') as fd:
     writer = LLVMWriter(fd)
     writer.writeout_prelude()
-    writer.writeout_decls(code_generator.get_decls())
+    writer.writeout_decls(cg.get_decls())

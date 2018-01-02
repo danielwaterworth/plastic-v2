@@ -106,7 +106,7 @@ class Lexer:
             output += self.next
             self.advance(1)
         if output in keywords:
-            return Token('keyword', keyword = output)
+            return Token('keyword', pos = pos, keyword = output)
         return Token('identifier', pos = pos, name = output)
 
     def lex_number(self):
