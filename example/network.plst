@@ -86,6 +86,20 @@ extern
     ->
       i32
 
+extern
+  recv
+    <-
+      i32,
+      ptr(i8),
+      u64,
+      i32,
+    ->
+      i64
+
+constant
+  msg_dontwait
+    64
+
 constant
   epollin
     1

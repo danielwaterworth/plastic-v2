@@ -49,6 +49,9 @@ class Ptr(TypeLevelExpr):
     def __eq__(self, other):
         return type(other) == Ptr
 
+    def __repr__(self):
+        return 'ptr'
+
 ptr = Ptr()
 
 def ptr_to(ty):
@@ -399,8 +402,13 @@ class Environment:
             new_args = []
             for actual, expected, value in zip(arg_types, function.ty.arg_types, args):
                 if not actual.substitutable_for(expected):
-                    print(actual, expected)
-                    raise TypeError()
+                    raise \
+                        TypeError(
+                            "can't pass %s for %s" % (
+                                repr(actual),
+                                repr(expected)
+                            )
+                        )
                 if actual == expected:
                     new_args.append(value)
                 else:
@@ -429,7 +437,13 @@ class Environment:
             x = self.check_expression(expr.x)
             if type(x.ty) == ModuleType:
                 if not expr.field in x.ty.values:
-                    raise TypeError()
+                    raise \
+                        TypeError(
+                            "No such value %s in module %s" % (
+                                repr(expr.field),
+                                repr(x.ty.name)
+                            ),
+                        )
                 return \
                     TypedASTNode(
                         'module_field_access',
@@ -439,7 +453,14 @@ class Environment:
                     )
             elif type(x.ty) == StructType:
                 if not expr.field in x.ty.fields:
-                    raise TypeError()
+                    raise \
+                        TypeError(
+                            "No such field %s in struct %s from module %s" % (
+                                repr(expr.field),
+                                repr(x.ty.name),
+                                repr(x.ty.module_name)
+                            ),
+                        )
                 return \
                     TypedASTNode(
                         'struct_field_access',
@@ -972,6 +993,7 @@ global_type_environment = {
     'i16': NumberType(True, 16),
     'i32': NumberType(True, 32),
     'u32': NumberType(False, 32),
+    'i64': NumberType(True, 64),
     'u64': NumberType(False, 64),
     'bool': boolean,
 }

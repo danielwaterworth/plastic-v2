@@ -99,7 +99,13 @@ define
       loop {
         console.puts("epoll_wait\00");
         let events: array(network.epoll_event, 1024);
-        let num_ready = network.epoll_wait(epoll_sock, &events[0], 1000, -1);
+        let num_ready =
+          network.epoll_wait(
+            epoll_sock,
+            &events[0],
+            1000,
+            -1
+          );
         if (num_ready < 0) {
           console.puts("problem\00");
           return void;
@@ -120,19 +126,34 @@ define
           if (event.events & network.epollin != 0) {
             if (fd == accept_sock) {
               console.puts("new connection available\00");
-              let new_connection = network.accept(accept_sock, null, null);
-              let event = network.epoll_event(network.epollin, new_connection as u64);
+              let new_connection =
+                network.accept(
+                  accept_sock,
+                  null,
+                  null
+                );
+              let event =
+                network.epoll_event(
+                  network.epollin,
+                  new_connection as u64,
+                );
               network.epoll_ctl(
                 epoll_sock,
                 network.epoll_ctl_add,
                 new_connection,
-                &event
+                &event,
               );
             } else {
-              # console.puts("connection ready to read\00");
-              # let buffer: array(u8, 1024);
-              # let length_received = recv(fd, &buffer[0], 1000, msg_dontwait);
-              # console.putint(fd);
+              console.puts("connection ready to read\00");
+              let buffer: array(i8, 1024);
+              let length_received =
+                network.recv(
+                  fd,
+                  &buffer[0],
+                  1000,
+                  network.msg_dontwait,
+                );
+              console.putint(fd);
             }
           }
         }
