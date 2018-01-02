@@ -40,7 +40,7 @@ class Parser:
     def expect(self, tag):
         token = self.next
         if self.next.tag != tag:
-            raise ParseError()
+            raise ParseError(self.next.pos)
         self.advance()
         return token
 
@@ -128,6 +128,15 @@ class Parser:
     def parse_type(self):
         return self.parse_type_1()
 
+    def parse_kind(self):
+        if self.next.tag == 'asterisk':
+            self.advance()
+            return ASTNode('star')
+        elif self.next.tag == 'identifier':
+            name = self.parse_identifier()
+            return ASTNode('named_kind', name = name)
+        raise NotImplementedError()
+
     def parse_enum(self):
         name = self.parse_identifier()
         constructors = []
@@ -148,7 +157,16 @@ class Parser:
 
     def parse_struct(self):
         name = self.parse_identifier()
+        type_args = []
         fields = []
+        if self.next.tag == 'at':
+            self.advance()
+            while not self.eof() and self.next.tag == 'identifier':
+                field_name = self.parse_identifier()
+                self.expect('colon')
+                kind = self.parse_kind()
+                self.expect('comma')
+                type_args.append((field_name, kind))
         if self.next.tag == 'keyword' and self.next.keyword == 'fields':
             self.advance()
             while not self.eof() and self.next.tag == 'identifier':
@@ -157,7 +175,6 @@ class Parser:
                 value = self.parse_type()
                 self.expect('comma')
                 fields.append((field_name, value))
-
         return \
             ASTNode(
                 'struct',
@@ -530,14 +547,23 @@ class Parser:
 
     def parse_function(self):
         name = self.parse_identifier()
+        type_args = []
         args = []
         product_type = None
         consume_type = None
         return_type = ASTNode('named_type', name = 'void')
         body = None
 
-        symbol = self.parse_symbol()
+        if self.next.tag == 'at':
+            self.advance()
+            while not self.eof() and self.next.tag == 'identifier':
+                field_name = self.parse_identifier()
+                self.expect('colon')
+                kind = self.parse_kind()
+                self.expect('comma')
+                type_args.append((field_name, kind))
 
+        symbol = self.parse_symbol()
         if symbol == "<-":
             while self.next.tag == 'identifier':
                 arg_name = self.next.name
