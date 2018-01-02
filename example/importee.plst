@@ -1,3 +1,7 @@
 constant
   test
     2
+
+struct
+  plah
+    field: i8,

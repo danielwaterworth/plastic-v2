@@ -5,7 +5,15 @@ constant
     importee.test
 
 define
+  bar
+    ->
+      importee.plah
+    = {
+      return importee.plah(1);
+    }
+
+define
   main
-  = {
-    return void;
-  }
+    = {
+      return void;
+    }

@@ -77,7 +77,7 @@ class Parser:
     def parse_symbol(self):
         return self.expect('symbol').symbol
 
-    def parse_type(self):
+    def parse_type_0(self):
         if self.next.tag == 'identifier':
             name = self.parse_identifier()
             output = ASTNode('named_type', name = name)
@@ -101,6 +101,22 @@ class Parser:
         else:
             raise ParseError()
 
+    def parse_type_1(self):
+        output = self.parse_type_0()
+        while not self.eof() and self.next.tag == 'dot':
+            self.advance()
+            field = self.parse_identifier()
+            output = \
+                ASTNode(
+                    'field_access',
+                    ty = output,
+                    field = field,
+                )
+        return output
+
+    def parse_type(self):
+        return self.parse_type_1()
+
     def parse_enum(self):
         name = self.parse_identifier()
         constructors = []
@@ -123,7 +139,7 @@ class Parser:
         name = self.parse_identifier()
         fields = []
 
-        while self.next.tag == 'identifier':
+        while not self.eof() and self.next.tag == 'identifier':
             field_name = self.parse_identifier()
             self.expect('colon')
             value = self.parse_type()

@@ -323,6 +323,11 @@ class Environment:
             return TypeApplication(function, args)
         elif ty.tag == 'type_number':
             return NatLiteral(ty.n)
+        elif ty.tag == 'field_access':
+            module = self.check_type(ty.ty)
+            if module.kind != module_kind:
+                raise TypeError()
+            return module.types[ty.field]
         raise NotImplementedError()
 
     def check_type_list(self, types):
@@ -931,8 +936,9 @@ class Environment:
             )
 
     def check_import(self, decl):
-        self.term_bindings[decl.module] = \
-            ModuleType(decl.module, self.modules[decl.module])
+        module_type = ModuleType(decl.module, self.modules[decl.module])
+        self.type_bindings[decl.module] = module_type
+        self.term_bindings[decl.module] = module_type
         return \
             TypedASTNode(
                 'import',
