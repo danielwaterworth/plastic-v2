@@ -3,3 +3,9 @@ import importee
 constant
   foo
     importee.test
+
+define
+  main
+  = {
+    return void;
+  }

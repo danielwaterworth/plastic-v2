@@ -265,34 +265,35 @@ class FunctionWriter:
     def generate_type_list(self, ty):
         return self.code_generator.generate_type_list(ty)
 
-    def generate_variable(self, expr):
-        if expr.name == 'void':
+    def generate_variable(self, name, module_name):
+        if name == 'void':
             return void, 'void'
-        elif expr.name == 'true':
+        elif name == 'true':
             return boolean, '1'
-        elif expr.name == 'false':
+        elif name == 'false':
             return boolean, '0'
-        elif expr.name == 'null':
+        elif name == 'null':
             return byte_ptr, 'null'
-        elif expr.name in self.code_generator.functions:
-            return self.code_generator.functions[expr.name]
-        elif expr.name in self.scope:
-            ty, ptr = self.scope[expr.name]
+        elif (module_name, name) in self.code_generator.functions:
+            return self.code_generator.functions[(module_name, name)]
+        elif name in self.scope:
+            ty, ptr = self.scope[name]
             return ty, self.load(ty, ptr)
-        elif expr.name in self.code_generator.constants:
-            ty, ptr = self.code_generator.constants[expr.name]
+        elif (module_name, name) in self.code_generator.constants:
+            ty, ptr = self.code_generator.constants[(module_name, name)]
             return ty, self.load(ty, ptr)
-        elif expr.name in self.arg_dict:
-            ty, ptr = self.arg_dict[expr.name]
+        elif name in self.arg_dict:
+            ty, ptr = self.arg_dict[name]
             return ty, self.load(ty, ptr)
         raise NotImplementedError()
 
     def generate_variable_l(self, expr):
+        module_name = self.code_generator.module_name
         if expr.name in self.scope:
             ty, ptr = self.scope[expr.name]
             return ptr_to(ty), ptr
-        elif expr.name in self.code_generator.constants:
-            ty, ptr = self.code_generator.constants[expr.name]
+        elif (module_name, expr.name) in self.code_generator.constants:
+            ty, ptr = self.code_generator.constants[(module_name, expr.name)]
             return ptr_to(ty), ptr
         raise NotImplementedError()
 
@@ -337,9 +338,7 @@ class FunctionWriter:
         return field_ty, self.extractvalue(struct_ty, value, [index])
 
     def generate_module_field_access(self, expr):
-        struct_ty, value = self.generate_expression(expr.x)
-        field = expr.field
-        raise NotImplementedError()
+        return self.generate_variable(expr.field, expr.x.ty.name)
 
     def generate_character_literal(self, expr):
         raise NotImplementedError()
@@ -419,7 +418,11 @@ class FunctionWriter:
 
     def generate_expression(self, expr):
         if expr.tag == 'variable':
-            output = self.generate_variable(expr)
+            output = \
+                self.generate_variable(
+                    expr.name,
+                    self.code_generator.module_name
+                )
         elif expr.tag == 'application':
             output = self.generate_application(expr)
         elif expr.tag == 'yield_expression':
@@ -738,7 +741,8 @@ class CodeGenerator:
         return_type = self.generate_type(decl.return_type)
         arg_types = self.generate_type_list(decl.arg_types)
 
-        self.functions[decl.name] = \
+        key = self.module_name, decl.name
+        self.functions[key] = \
             ptr_to(func(arg_types, return_type)), '@' + decl.name
 
         return [
@@ -760,7 +764,8 @@ class CodeGenerator:
         arg_types = [ty for _, ty in fields]
         arg_names = ['%' + name for name, _ in fields]
 
-        self.functions[decl.name] = \
+        key = self.module_name, decl.name
+        self.functions[key] = \
             ptr_to(func(arg_types, return_type)), '@' + decl.name
 
         function_writer = FunctionWriter(self)
@@ -876,12 +881,13 @@ class CodeGenerator:
         output = function_writer.load(return_type, ptr)
         function_writer.current_basic_block.terminator = \
             return_(return_type, output)
-        self.functions[name] = \
+        function_key = self.module_name, name
+        self.functions[function_key] = \
             ptr_to(func(types, return_type)), '@' + name
         return \
             CGASTNode(
                 'define',
-                name = '@'+name,
+                name = '@' + name,
                 return_type = return_type,
                 args = args,
                 basic_blocks = function_writer.basic_blocks,
@@ -943,13 +949,19 @@ class CodeGenerator:
         function_writer.arg_dict = arg_dict
         function_writer.generate_statements(decl.body)
 
-        self.functions[decl.name] = \
-            ptr_to(func(arg_types, return_type)), '@' + decl.name
+        if decl.name == 'main':
+            llvm_name = '@main'
+        else:
+            llvm_name = "@%s$$%s" % (self.module_name, decl.name)
+
+        function_key = self.module_name, decl.name
+        self.functions[function_key] = \
+            ptr_to(func(arg_types, return_type)), llvm_name
         return [
             CGASTNode(
                 'define',
                 linkage = [],
-                name = '@' + decl.name,
+                name = llvm_name,
                 args = args,
                 basic_blocks = function_writer.basic_blocks,
                 return_type = return_type,
@@ -962,7 +974,8 @@ class CodeGenerator:
         ty, value = function_writer.generate_expression(decl.expr)
         function_writer.current_basic_block.terminator = return_(void, 'void')
         function_writer.store('@' + decl.name, ty, value)
-        self.constants[decl.name] = ty, '@' + decl.name
+        key = self.module_name, decl.name
+        self.constants[key] = ty, '@' + decl.name
         self.initializers.append(function_name)
         return [
             CGASTNode(
