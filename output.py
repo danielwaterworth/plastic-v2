@@ -50,6 +50,8 @@ class LLVMWriter:
             self.write(']')
         elif ty.tag == 'named_type':
             self.write('%')
+            self.write(ty.module_name)
+            self.write("$$")
             self.write(ty.name)
         elif ty.tag == 'void':
             self.write('void')
@@ -77,6 +79,8 @@ class LLVMWriter:
 
     def writeout_struct(self, decl):
         self.write("%")
+        self.write(decl.module_name)
+        self.write("$$")
         self.write(decl.name)
         self.write(" = type { ")
         self.writeout_type_list(decl.fields)

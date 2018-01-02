@@ -786,6 +786,7 @@ class CodeGenerator:
         return [
             CGASTNode(
                 'struct',
+                module_name = self.module_name,
                 name = decl.name,
                 fields = [ty for _, ty in fields],
             ),
@@ -828,6 +829,7 @@ class CodeGenerator:
         return \
             CGASTNode(
                 'struct',
+                module_name = self.module_name,
                 name = name,
                 fields = types,
             )
@@ -911,6 +913,7 @@ class CodeGenerator:
                    CGASTNode(
                        'struct',
                        name = decl.name,
+                       module_name = self.module_name,
                        fields = [
                            byte,
                            CGASTNode(
