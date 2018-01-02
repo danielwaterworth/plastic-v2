@@ -348,6 +348,7 @@ for module_name, decls in modules:
             {},
             {},
             global_env,
+            module_name = module_name,
             modules = checked_module_interfaces,
         )
     decls = env.check_top_level_decls(decls)

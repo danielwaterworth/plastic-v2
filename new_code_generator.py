@@ -18,10 +18,11 @@ def number(width):
             width = width,
         )
 
-def named_type(name):
+def named_type(module_name, name):
     return  \
         CGASTNode(
             'named_type',
+            module_name = module_name,
             name = name,
         )
 
@@ -304,7 +305,8 @@ class FunctionWriter:
     def generate_field_access_l(self, expr):
         struct_ty, ptr = self.generate_l_expr(expr.l_expr)
         field = expr.field
-        index, field_ty = self.code_generator.structs[struct_ty.ty.name][field]
+        key = struct_ty.ty.module_name, struct_ty.ty.name
+        index, field_ty = self.code_generator.structs[key][field]
         field_ptr = \
             self.getelementptr(struct_ty.ty, struct_ty, ptr, ['0', str(index)])
         return ptr_to(field_ty), field_ptr
@@ -330,7 +332,8 @@ class FunctionWriter:
     def generate_struct_field_access(self, expr):
         struct_ty, value = self.generate_expression(expr.x)
         field = expr.field
-        index, field_ty = self.code_generator.structs[struct_ty.name][field]
+        key = struct_ty.module_name, struct_ty.name
+        index, field_ty = self.code_generator.structs[key][field]
         return field_ty, self.extractvalue(struct_ty, value, [index])
 
     def generate_module_field_access(self, expr):
@@ -593,10 +596,11 @@ class FunctionWriter:
             self.scope[pattern.name] = ty, ptr
         elif pattern.tag == 'constructor':
             constructor_ptr = self.getelementptr(ty, ptr_to(ty), ptr, ["0", "1"])
-            constructor_ty = named_type(pattern.name)
+            constructor_ty = named_type(pattern.ty.module_name, pattern.name)
+            key = pattern.ty.module_name, pattern.ty.name
             size = \
                 self.code_generator.calculate_enum_size(
-                    self.code_generator.enums[pattern.ty.name]
+                    self.code_generator.enums[key]
                 )
             data_ptr = \
                 self.bitcast(
@@ -628,10 +632,11 @@ class FunctionWriter:
             output = self.icmp('eq', byte, expected_tag, actual_tag)
             constructor_ptr = \
                 self.getelementptr(ty, ptr_to(ty), ptr, ["0", "1"])
-            constructor_ty = named_type(pattern.name)
+            constructor_ty = named_type(pattern.ty.module_name, pattern.name)
+            key = pattern.ty.module_name, pattern.ty.name
             size = \
                 self.code_generator.calculate_enum_size(
-                    self.code_generator.enums[pattern.ty.name],
+                    self.code_generator.enums[key],
                 )
             data_ptr = \
                 self.bitcast(
@@ -714,9 +719,9 @@ class CodeGenerator:
         elif type_checker.is_array(ty):
             return array_of(self.generate_type(ty.args[0]), ty.args[1].n)
         elif type(ty) == type_checker.StructType:
-            return named_type(ty.name)
+            return named_type(ty.module_name, ty.name)
         elif type(ty) == type_checker.EnumType:
-            return named_type(ty.name)
+            return named_type(ty.module_name, ty.name)
         elif type(ty) == type_checker.Void:
             return void
         elif type(ty) == type_checker.Boolean:
@@ -749,7 +754,7 @@ class CodeGenerator:
         fields = \
             [(name, self.generate_type(ty)) for name, ty in decl.fields]
 
-        return_type = named_type(decl.name)
+        return_type = named_type(self.module_name, decl.name)
 
         names = [name for name, _ in fields]
         arg_types = [ty for _, ty in fields]
@@ -760,9 +765,10 @@ class CodeGenerator:
 
         function_writer = FunctionWriter(self)
         output_ptr = function_writer.alloca(return_type)
-        self.structs[decl.name] = {}
+        key = self.module_name, decl.name
+        self.structs[key] = {}
         for i, name, ty in zip(itertools.count(), names, arg_types):
-            self.structs[decl.name][name] = (i, ty)
+            self.structs[key][name] = (i, ty)
 
         for i, name, ty in zip(itertools.count(), arg_names, arg_types):
             field_ptr = \
@@ -799,11 +805,12 @@ class CodeGenerator:
         elif ty.tag == 'number':
             return ty.width // 8
         elif ty.tag == 'named_type':
-            if ty.name in self.structs:
-                fields = self.structs[ty.name]
+            key = (ty.module_name, ty.name)
+            if key in self.structs:
+                fields = self.structs[key]
                 return sum([self.size_of(ty) for _, ty in fields.values()])
-            if ty.name in self.enums:
-                constructors = self.enums[ty.name]
+            if key in self.enums:
+                constructors = self.enums[key]
                 return self.calculate_enum_size(constructors)
         print(ty)
         raise NotImplementedError()
@@ -829,7 +836,7 @@ class CodeGenerator:
         args = \
             list(zip(types, map(lambda i: "%%arg.%d" % i, itertools.count())))
         function_writer = FunctionWriter(self)
-        return_type = named_type(enum_name)
+        return_type = named_type(self.module_name, enum_name)
         ptr = function_writer.alloca(return_type)
         tag_ptr = \
             function_writer.getelementptr(
@@ -846,8 +853,9 @@ class CodeGenerator:
                 ptr,
                 ["0", "1"]
             )
-        size = self.calculate_enum_size(self.enums[enum_name])
-        enum_data_type = named_type(name)
+        key = self.module_name, enum_name
+        size = self.calculate_enum_size(self.enums[key])
+        enum_data_type = named_type(self.module_name, name)
         data_ptr = \
             function_writer.bitcast(
                 ptr_to(array_of(byte, size)),
@@ -888,7 +896,8 @@ class CodeGenerator:
             [self.generate_constructor_struct(name, types)
              for name, types in constructors]
 
-        self.enums[decl.name] = constructors
+        key = self.module_name, decl.name
+        self.enums[key] = constructors
         size = self.calculate_enum_size(constructors)
 
         self.constructor_tags[decl.name] = {}

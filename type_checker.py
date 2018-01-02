@@ -140,13 +140,15 @@ class TypeApplication(TypeLevelExpr):
 class StructType(TypeLevelExpr):
     kind = star
 
-    def __init__(self, name):
+    def __init__(self, module_name, name):
+        self.module_name = module_name
         self.name = name
 
 class EnumType(TypeLevelExpr):
     kind = star
 
-    def __init__(self, name):
+    def __init__(self, module_name, name):
+        self.module_name = module_name
         self.name = name
 
 class Coroutine(TypeLevelExpr):
@@ -252,7 +254,16 @@ class ModuleInterface:
         self.types = types
 
 class Environment:
-    def __init__(self, type_bindings, term_bindings, parent=None, product_type=None, consume_type=None, return_type=None, modules={}):
+    def __init__(
+            self,
+            type_bindings,
+            term_bindings,
+            parent=None,
+            product_type=None,
+            consume_type=None,
+            return_type=None,
+            modules={},
+            module_name=None):
         self.modules = modules
         self.type_bindings = type_bindings
         self.term_bindings = term_bindings
@@ -260,16 +271,20 @@ class Environment:
         self.product_type = None
         self.consume_type = None
         self.return_type = None
+        self.module_name = None
         if parent:
             self.product_type = parent.product_type
             self.consume_type = parent.consume_type
             self.return_type = parent.return_type
+            self.module_name = parent.module_name
         if product_type:
             self.product_type = product_type
         if consume_type:
             self.consume_type = consume_type
         if return_type:
             self.return_type = return_type
+        if module_name:
+            self.module_name = module_name
 
     def lookup_type(self, key):
         try:
@@ -314,7 +329,7 @@ class Environment:
         return [self.check_type(type) for type in types]
 
     def check_struct(self, decl):
-        struct_type = StructType(decl.name)
+        struct_type = StructType(self.module_name, decl.name)
         self.type_bindings[decl.name] = struct_type
         fields = [(name, self.check_type(ty)) for name, ty in decl.fields]
         self.term_bindings[decl.name] = \
@@ -328,7 +343,7 @@ class Environment:
             )
 
     def check_enum(self, decl):
-        enum_type = EnumType(decl.name)
+        enum_type = EnumType(self.module_name, decl.name)
         self.type_bindings[decl.name] = enum_type
         constructors = \
             [(name, self.check_type_list(ty)) for name, ty in decl.constructors]
