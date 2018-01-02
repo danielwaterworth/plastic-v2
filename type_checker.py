@@ -424,18 +424,28 @@ class Environment:
                 )
         else:
             self.type_bindings[decl.name] = struct_type
+
         fields = \
             [(name, new_env.check_type(ty)) for name, ty in decl.fields]
         struct_type.fields = dict(fields)
 
-        if len(type_param_kinds) > 0:
-            raise NotImplementedError()
-        self.term_bindings[decl.name] = \
+        constructor_type = \
             FunctionType(
                 'plastic',
                 [ty for _, ty in fields],
                 struct_type,
             )
+
+        if len(type_param_kinds) > 0:
+            self.term_bindings[decl.name] = \
+                LambdaType(
+                    type_param_kinds,
+                    constructor_type,
+                )
+        else:
+            self.term_bindings[decl.name] = \
+                constructor_type
+
         return \
             TypedASTNode(
                 'struct',
@@ -447,7 +457,8 @@ class Environment:
         enum_type = EnumType(self.module_name, decl.name)
         self.type_bindings[decl.name] = enum_type
         constructors = \
-            [(name, self.check_type_list(ty)) for name, ty in decl.constructors]
+            [(name, self.check_type_list(ty))
+                for name, ty in decl.constructors]
         for name, args in constructors:
             self.term_bindings[name] = \
                 FunctionType('plastic', args, enum_type)
