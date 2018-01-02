@@ -1030,10 +1030,10 @@ class Environment:
         consume_type = None
         product_type = None
         if decl.consume_type:
-            consume_type = self.check_type(decl.consume_type)
+            consume_type = new_env.check_type(decl.consume_type)
         if decl.product_type:
-            product_type = self.check_type(decl.product_type)
-        return_type = self.check_type(decl.return_type)
+            product_type = new_env.check_type(decl.product_type)
+        return_type = new_env.check_type(decl.return_type)
 
         if consume_type or product_type:
             self.term_bindings[decl.name] = \
@@ -1058,7 +1058,7 @@ class Environment:
             Environment(
                 {},
                 dict(args),
-                self,
+                new_env,
                 product_type,
                 consume_type,
                 return_type
