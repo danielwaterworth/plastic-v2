@@ -454,14 +454,43 @@ class Environment:
             )
 
     def check_enum(self, decl):
+        type_param_kinds = self.check_type_params(decl.type_params)
+        type_params = \
+            [(name, TypeVariable(name, kind))
+                for name, kind in type_param_kinds]
+        new_env = \
+            Environment(
+                dict(type_params),
+                {},
+                self,
+            )
+
         enum_type = EnumType(self.module_name, decl.name)
-        self.type_bindings[decl.name] = enum_type
+        if len(type_param_kinds) > 0:
+            self.type_bindings[decl.name] = \
+                LambdaType(
+                    type_param_kinds,
+                    enum_type,
+                )
+        else:
+            self.type_bindings[decl.name] = enum_type
+
         constructors = \
-            [(name, self.check_type_list(ty))
+            [(name, new_env.check_type_list(ty))
                 for name, ty in decl.constructors]
+
         for name, args in constructors:
-            self.term_bindings[name] = \
+            constructor_type = \
                 FunctionType('plastic', args, enum_type)
+            if len(type_param_kinds) > 0:
+                self.term_bindings[name] = \
+                    LambdaType(
+                        type_param_kinds,
+                        constructor_type,
+                    )
+            else:
+                self.term_bindings[name] = \
+                    constructor_type
         enum_type.constructors = dict(constructors)
         return \
             TypedASTNode(

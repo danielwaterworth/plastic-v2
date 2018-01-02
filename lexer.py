@@ -17,6 +17,7 @@ keywords = {
     'as',
     'break',
     'constant',
+    'constructors',
     'define',
     'else',
     'enum',

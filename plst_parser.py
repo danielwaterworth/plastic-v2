@@ -141,18 +141,31 @@ class Parser:
         name = self.parse_identifier()
         constructors = []
 
-        while self.next.tag == 'identifier':
-            constructor_name = self.parse_identifier()
-            self.expect('open_paren')
-            values = self.parse_type_arg_list()
-            self.expect('comma')
-            constructors.append((constructor_name, values))
+        type_params = []
+        if self.next.tag == 'at':
+            self.advance()
+            while not self.eof() and self.next.tag == 'identifier':
+                field_name = self.parse_identifier()
+                self.expect('colon')
+                kind = self.parse_kind()
+                self.expect('comma')
+                type_params.append((field_name, kind))
+
+        if self.next.tag == 'keyword' and self.next.keyword == 'constructors':
+            self.advance()
+            while self.next.tag == 'identifier':
+                constructor_name = self.parse_identifier()
+                self.expect('open_paren')
+                values = self.parse_type_arg_list()
+                self.expect('comma')
+                constructors.append((constructor_name, values))
 
         return \
             ASTNode(
                 'enum',
                 name = name,
                 constructors = constructors,
+                type_params = type_params,
             )
 
     def parse_struct(self):

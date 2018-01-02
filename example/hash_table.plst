@@ -1,0 +1,45 @@
+enum
+  maybe
+    @
+      x: *,
+    constructors
+      none(),
+      just(x),
+
+struct
+  hashtable
+    @
+      key: *,
+      value: *,
+      n: nat,
+    fields
+      data: array(maybe((key, value)), n),
+
+define
+  empty
+    @
+      key: *,
+      value: *,
+      n: nat,
+    ->
+      hashtable(key, value, n)
+    = {
+      let output: hashtable(key, value, n);
+      return output;
+    }
+
+define
+  insert
+    @
+      key: *,
+      value: *,
+      n: nat,
+    <-
+      table: ptr(hashtable(key, value, n)),
+      key: key,
+      value: value,
+    ->
+      bool
+    = {
+      return false;
+    }
