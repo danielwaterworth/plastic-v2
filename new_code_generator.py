@@ -765,8 +765,9 @@ class CodeGenerator:
         arg_names = ['%' + name for name, _ in fields]
 
         key = self.module_name, decl.name
+        llvm_name = "@%s$$%s" % key
         self.functions[key] = \
-            ptr_to(func(arg_types, return_type)), '@' + decl.name
+            ptr_to(func(arg_types, return_type)), llvm_name
 
         function_writer = FunctionWriter(self)
         output_ptr = function_writer.alloca(return_type)
@@ -797,7 +798,7 @@ class CodeGenerator:
             ),
             CGASTNode(
                 'define',
-                name = '@' + decl.name,
+                name = llvm_name,
                 return_type = return_type,
                 args = list(zip(arg_types, arg_names)),
                 basic_blocks = function_writer.basic_blocks,
@@ -882,12 +883,13 @@ class CodeGenerator:
         function_writer.current_basic_block.terminator = \
             return_(return_type, output)
         function_key = self.module_name, name
+        llvm_name = "@%s$$%s" % function_key
         self.functions[function_key] = \
-            ptr_to(func(types, return_type)), '@' + name
+            ptr_to(func(types, return_type)), llvm_name
         return \
             CGASTNode(
                 'define',
-                name = '@' + name,
+                name = llvm_name,
                 return_type = return_type,
                 args = args,
                 basic_blocks = function_writer.basic_blocks,
@@ -973,14 +975,15 @@ class CodeGenerator:
         function_writer = FunctionWriter(self)
         ty, value = function_writer.generate_expression(decl.expr)
         function_writer.current_basic_block.terminator = return_(void, 'void')
-        function_writer.store('@' + decl.name, ty, value)
+        llvm_name = "@%s$$%s" % (self.module_name, decl.name)
+        function_writer.store(llvm_name, ty, value)
         key = self.module_name, decl.name
-        self.constants[key] = ty, '@' + decl.name
+        self.constants[key] = ty, llvm_name
         self.initializers.append(function_name)
         return [
             CGASTNode(
                 'global',
-                name = '@' + decl.name,
+                name = llvm_name,
                 ty = ty,
             ),
             CGASTNode(
