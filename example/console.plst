@@ -1,0 +1,27 @@
+extern
+  puts
+    <-
+      ptr(i8),
+    ->
+      void
+
+extern
+  putchar
+    <-
+      u32,
+    ->
+      void
+
+extern
+  putint
+    <-
+      i32,
+    ->
+      void
+
+extern
+  putu64
+    <-
+      u64,
+    ->
+      void

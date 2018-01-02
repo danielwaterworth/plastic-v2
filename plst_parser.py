@@ -81,7 +81,7 @@ class Parser:
         if self.next.tag == 'identifier':
             name = self.parse_identifier()
             output = ASTNode('named_type', name = name)
-            if self.next.tag == 'open_paren':
+            if not self.eof() and self.next.tag == 'open_paren':
                 self.advance()
                 return \
                     ASTNode(

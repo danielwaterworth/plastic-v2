@@ -1,0 +1,191 @@
+constant
+  af_inet
+    2
+
+constant
+  af_inet6
+    10
+
+constant
+  sock_stream
+    1
+
+constant
+  default_protocol
+    0
+
+constant
+  ai_passive
+    1
+
+struct
+  sockaddr
+    sa_family: i16,
+    sa_data: array(i8, 14),
+
+struct
+  addrinfo
+    ai_flags: i32,
+    ai_family: i32,
+    ai_socktype: i32,
+    ai_protocol: i32,
+    ai_addrlen: u32,
+    ai_addr: ptr(sockaddr),
+    ai_canonname: ptr(i8),
+    ai_next: ptr(addrinfo),
+
+extern
+  getaddrinfo
+    <-
+      ptr(i8),
+      ptr(i8),
+      ptr(addrinfo),
+      ptr(ptr(addrinfo)),
+    ->
+      i32
+
+extern
+  socket
+    <-
+      u32,
+      u32,
+      u32,
+    ->
+      i32
+
+extern
+  bind
+    <-
+      i32,
+      ptr(sockaddr),
+      u32,
+    ->
+      u32
+
+extern
+  listen
+    <-
+      i32,
+      i32,
+    ->
+      i32
+
+extern
+  accept
+    <-
+      i32,
+      ptr(sockaddr),
+      ptr(u32),
+    ->
+      i32
+
+extern
+  close
+    <-
+      i32,
+    ->
+      i32
+
+constant
+  epollin
+    1
+
+constant
+  epollpri
+    2
+
+constant
+  epollout
+    4
+
+constant
+  epollerr
+    8
+
+constant
+  epollhup
+    16
+
+constant
+  epollrdnorm
+    64
+
+constant
+  epollrdband
+    128
+
+constant
+  epollwrnorm
+    256
+
+constant
+  epollwrband
+    512
+
+constant
+  epollmsg
+    1024
+
+constant
+  epollrdhup
+    8192
+
+constant
+  epollexclusive
+    268435456
+
+constant
+  epollwakeup
+    536870912
+
+constant
+  epolloneshot
+    1073741824
+
+constant
+  epollet
+    2147483648
+
+constant
+  epoll_ctl_add
+    1
+
+constant
+  epoll_ctl_del
+    2
+
+constant
+  epoll_ctl_mod
+    3
+
+struct
+  epoll_event
+    events: u32,
+    data: u64,
+
+extern
+  epoll_create1
+    <-
+      i32,
+    ->
+      i32
+
+extern
+  epoll_ctl
+    <-
+      i32,
+      i32,
+      i32,
+      ptr(epoll_event),
+    ->
+      i32
+
+extern
+  epoll_wait
+    <-
+      i32,
+      ptr(epoll_event),
+      i32,
+      i32,
+    ->
+      i32

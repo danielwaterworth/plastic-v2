@@ -1,194 +1,5 @@
-constant
-  af_inet
-    2
-
-constant
-  af_inet6
-    10
-
-constant
-  sock_stream
-    1
-
-constant
-  default_protocol
-    0
-
-constant
-  ai_passive
-    1
-
-struct
-  sockaddr
-    sa_family: i16,
-    sa_data: array(i8, 14),
-
-struct
-  addrinfo
-    ai_flags: i32,
-    ai_family: i32,
-    ai_socktype: i32,
-    ai_protocol: i32,
-    ai_addrlen: u32,
-    ai_addr: ptr(sockaddr),
-    ai_canonname: ptr(i8),
-    ai_next: ptr(addrinfo),
-
-extern
-  getaddrinfo
-    <-
-      ptr(i8),
-      ptr(i8),
-      ptr(addrinfo),
-      ptr(ptr(addrinfo)),
-    ->
-      i32
-
-extern
-  socket
-    <-
-      u32,
-      u32,
-      u32,
-    ->
-      i32
-
-extern
-  bind
-    <-
-      i32,
-      ptr(sockaddr),
-      u32,
-    ->
-      u32
-
-extern
-  listen
-    <-
-      i32,
-      i32,
-    ->
-      i32
-
-extern
-  accept
-    <-
-      i32,
-      ptr(sockaddr),
-      ptr(u32),
-    ->
-      i32
-
-extern
-  close
-    <-
-      i32,
-    ->
-      i32
-
-constant
-  epollin
-    1
-
-constant
-  epollpri
-    2
-
-constant
-  epollout
-    4
-
-constant
-  epollerr
-    8
-
-constant
-  epollhup
-    16
-
-constant
-  epollrdnorm
-    64
-
-constant
-  epollrdband
-    128
-
-constant
-  epollwrnorm
-    256
-
-constant
-  epollwrband
-    512
-
-constant
-  epollmsg
-    1024
-
-constant
-  epollrdhup
-    8192
-
-constant
-  epollexclusive
-    268435456
-
-constant
-  epollwakeup
-    536870912
-
-constant
-  epolloneshot
-    1073741824
-
-constant
-  epollet
-    2147483648
-
-constant
-  epoll_ctl_add
-    1
-
-constant
-  epoll_ctl_del
-    2
-
-constant
-  epoll_ctl_mod
-    3
-
-struct
-  epoll_event
-    events: u32,
-    data: u64,
-
-extern
-  epoll_create1
-    <-
-      i32,
-    ->
-      i32
-
-extern
-  epoll_ctl
-    <-
-      i32,
-      i32,
-      i32,
-      ptr(epoll_event),
-    ->
-      i32
-
-extern
-  epoll_wait
-    <-
-      i32,
-      ptr(epoll_event),
-      i32,
-      i32,
-    ->
-      i32
+import network
+import console
 
 extern
   memchr
@@ -198,34 +9,6 @@ extern
       u64,
     ->
       ptr(i8)
-
-extern
-  puts
-    <-
-      ptr(i8),
-    ->
-      void
-
-extern
-  putchar
-    <-
-      u32,
-    ->
-      void
-
-extern
-  putint
-    <-
-      i32,
-    ->
-      void
-
-extern
-  putu64
-    <-
-      u64,
-    ->
-      void
 
 struct
   chunk_t
@@ -256,44 +39,49 @@ define
       i32
     = {
       let err: i32 = -1;
-      let addr: ptr(addrinfo) = null;
+      let addr: ptr(network.addrinfo) = null;
       let hints =
-        addrinfo(
-          ai_passive,
-          af_inet,
-          sock_stream,
+        network.addrinfo(
+          network.ai_passive,
+          network.af_inet,
+          network.sock_stream,
           0,
           0,
           null,
           null,
           null,
         );
-      puts("getaddrinfo\00");
-      if (getaddrinfo(null, "5000\00", &hints, &addr) != 0) {
+      console.puts("getaddrinfo\00");
+      if (network.getaddrinfo(null, "5000\00", &hints, &addr) != 0) {
         return err;
       }
 
       let accept_sock: i32 = 0;
       loop {
-        puts("socket\00");
-        accept_sock = socket(af_inet, sock_stream, default_protocol);
+        console.puts("socket\00");
+        accept_sock =
+          network.socket(
+            network.af_inet,
+            network.sock_stream,
+            network.default_protocol
+          );
         if (accept_sock >= 0) {
-          puts("bind\00");
-          if (bind(accept_sock, (*addr).ai_addr, (*addr).ai_addrlen) == 0) {
-            puts("found a socket\00");
+          console.puts("bind\00");
+          if (network.bind(accept_sock, (*addr).ai_addr, (*addr).ai_addrlen) == 0) {
+            console.puts("found a socket\00");
             break;
           }
         }
 
         addr = (*addr).ai_next;
         if (addr == null) {
-          puts("failed to find an addr\00");
+          console.puts("failed to find an addr\00");
           return err;
         }
       }
 
-      puts("listen\00");
-      if (listen(accept_sock, 1024) != 0) {
+      console.puts("listen\00");
+      if (network.listen(accept_sock, 1024) != 0) {
         return err;
       }
 
@@ -309,37 +97,42 @@ define
       void
     = {
       loop {
-        puts("epoll_wait\00");
-        let events: array(epoll_event, 1024);
-        let num_ready = epoll_wait(epoll_sock, &events[0], 1000, -1);
+        console.puts("epoll_wait\00");
+        let events: array(network.epoll_event, 1024);
+        let num_ready = network.epoll_wait(epoll_sock, &events[0], 1000, -1);
         if (num_ready < 0) {
-          puts("problem\00");
+          console.puts("problem\00");
           return void;
         }
 
-        putint(num_ready);
+        console.putint(num_ready);
         let i: i32 = 0;
         loop {
           if (i >= num_ready) {
-            puts("breaking\00");
+            console.puts("breaking\00");
             break;
           }
-          putint(i);
+          console.putint(i);
           let event = events[i];
           i = i + 1;
 
           let fd = event.data as i32;
-          if (event.events & epollin != 0) {
+          if (event.events & network.epollin != 0) {
             if (fd == accept_sock) {
-              puts("new connection available\00");
-              let new_connection = accept(accept_sock, null, null);
-              let event = epoll_event(epollin, new_connection as u64);
-              epoll_ctl(epoll_sock, epoll_ctl_add, new_connection, &event);
+              console.puts("new connection available\00");
+              let new_connection = network.accept(accept_sock, null, null);
+              let event = network.epoll_event(network.epollin, new_connection as u64);
+              network.epoll_ctl(
+                epoll_sock,
+                network.epoll_ctl_add,
+                new_connection,
+                &event
+              );
             } else {
-              # puts("connection ready to read\00");
+              # console.puts("connection ready to read\00");
               # let buffer: array(u8, 1024);
               # let length_received = recv(fd, &buffer[0], 1000, msg_dontwait);
-              # putint(fd);
+              # console.putint(fd);
             }
           }
         }
@@ -352,12 +145,12 @@ define
       let i: i32 = 0;
       loop {
         if (i >= 5) {
-          puts("breaking\00");
+          console.puts("breaking\00");
           break;
         } else {
-          puts("not breaking\00");
+          console.puts("not breaking\00");
         }
-        putint(i);
+        console.putint(i);
         i = i + 1;
       }
       return void;
@@ -373,15 +166,15 @@ define
         return void;
       }
 
-      let epoll_sock = epoll_create1(0);
+      let epoll_sock = network.epoll_create1(0);
       if (epoll_sock < 0) {
         return void;
       }
 
-      let event = epoll_event(epollin, accept_sock as u64);
-      putint(accept_sock);
-      putu64(accept_sock as u64);
-      epoll_ctl(epoll_sock, epoll_ctl_add, accept_sock, &event);
+      let event = network.epoll_event(network.epollin, accept_sock as u64);
+      console.putint(accept_sock);
+      console.putu64(accept_sock as u64);
+      network.epoll_ctl(epoll_sock, network.epoll_ctl_add, accept_sock, &event);
 
       main_loop(accept_sock, epoll_sock);
       return void;
