@@ -60,6 +60,10 @@ class LLVMWriter:
             self.write(' (')
             self.writeout_type_list(ty.arg_types)
             self.write(')')
+        elif ty.tag == 'tuple':
+            self.write('{ ')
+            self.writeout_type_list(ty.types)
+            self.write(' }')
         else:
             print(ty)
             raise NotImplementedError()
@@ -275,6 +279,19 @@ class LLVMWriter:
             self.writeout_type(instruction.ty)
             self.write(" ")
             self.writeout_value(instruction.value)
+            for index in instruction.indices:
+                self.write(", ")
+                self.write(str(index))
+        elif instruction.tag == 'insertvalue':
+            self.write(instruction.dst)
+            self.write(" = insertvalue ")
+            self.writeout_type(instruction.struct_ty)
+            self.write(" ")
+            self.writeout_value(instruction.struct_val)
+            self.write(", ")
+            self.writeout_type(instruction.field_ty)
+            self.write(" ")
+            self.writeout_value(instruction.field_val)
             for index in instruction.indices:
                 self.write(", ")
                 self.write(str(index))

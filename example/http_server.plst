@@ -20,7 +20,14 @@ define
           null,
         );
       console.puts("getaddrinfo\00");
-      if (network.getaddrinfo(null, "5000\00", &hints, &addr) != 0) {
+      let getaddrinfo_result =
+        network.getaddrinfo(
+          null,
+          "5000\00",
+          &hints,
+          &addr,
+        );
+      if (getaddrinfo_result != 0) {
         return err;
       }
 
@@ -35,7 +42,13 @@ define
           );
         if (accept_sock >= 0) {
           console.puts("bind\00");
-          if (network.bind(accept_sock, (*addr).ai_addr, (*addr).ai_addrlen) == 0) {
+          let bind_result =
+            network.bind(
+              accept_sock,
+              (*addr).ai_addr,
+              (*addr).ai_addrlen,
+            );
+          if (bind_result == 0) {
             console.puts("found a socket\00");
             break;
           }
@@ -67,6 +80,7 @@ define
       loop {
         console.puts("epoll_wait\00");
         let events: array(network.epoll_event, 1024);
+
         let num_ready =
           network.epoll_wait(
             epoll_sock,
@@ -98,7 +112,7 @@ define
                 network.accept(
                   accept_sock,
                   null,
-                  null
+                  null,
                 );
               let event =
                 network.epoll_event(
@@ -129,27 +143,8 @@ define
     }
 
 define
-  test_loop
-    = {
-      let i: i32 = 0;
-      loop {
-        if (i >= 5) {
-          console.puts("breaking\00");
-          break;
-        } else {
-          console.puts("not breaking\00");
-        }
-        console.putint(i);
-        i = i + 1;
-      }
-      return void;
-    }
-
-define
   main
     = {
-      test_loop();
-
       let accept_sock = initialize_accept_socket();
       if (accept_sock < 0) {
         return void;

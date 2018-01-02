@@ -98,6 +98,17 @@ class Parser:
                     'type_number',
                     n = n,
                 )
+        elif self.next.tag == 'open_paren':
+            self.advance()
+            output = self.parse_type_arg_list()
+            if len(output) == 1:
+                return output[0]
+            else:
+                return \
+                    ASTNode(
+                        'tuple',
+                        types = output,
+                    )
         else:
             raise ParseError()
 
@@ -166,15 +177,18 @@ class Parser:
                     return things
                 self.expect('comma')
 
-    def parse_bracketed_expression(self):
-        self.expect('open_paren')
-        expr = self.parse_expression()
-        self.expect('close_paren')
-        return expr
-
     def parse_expression_0(self):
         if self.next.tag == 'open_paren':
-            return self.parse_bracketed_expression()
+            self.advance()
+            values = self.parse_term_arg_list()
+            if len(values) == 1:
+                return values[0]
+            else:
+                return \
+                    ASTNode(
+                        'tuple',
+                        values = values,
+                    )
         elif self.next.tag == 'character':
             c = self.next.c
             self.advance()

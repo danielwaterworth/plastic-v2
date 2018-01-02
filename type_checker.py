@@ -5,11 +5,17 @@ class StarKind(Kind):
     def __eq__(self, other):
         return type(other) == StarKind
 
+    def __repr__(self):
+        return 'star'
+
 star = StarKind()
 
 class NatKind(Kind):
     def __eq__(self, other):
         return type(other) == NatKind
+
+    def __repr__(self):
+        return 'nat'
 
 nat = NatKind()
 
@@ -63,7 +69,27 @@ class Array(TypeLevelExpr):
     def __eq__(self, other):
         return type(other) == Array
 
+    def __repr__(self):
+        return 'array'
+
 array = Array()
+
+class Tuple(TypeLevelExpr):
+    def __init__(self, n):
+        self.n = n
+
+    @property
+    def kind(self):
+        return FunctionKind([star] * self.n, star)
+
+    def __eq__(self, other):
+        return type(other) == Tuple and self.n == other.n
+
+    def __repr__(self):
+        if self.n == '0':
+            return '()'
+        else:
+            return '(' + ','*(self.n-1) + ')'
 
 class NatLiteral(TypeLevelExpr):
     kind = nat
@@ -224,6 +250,12 @@ def is_array(x):
             return True
     return False
 
+def is_tuple(x):
+    if type(x) == TypeApplication:
+        if type(x.function) == Tuple:
+            return True
+    return False
+
 def is_number(x):
     return type(x) in [NumberType, OpaqueNumberType]
 
@@ -331,6 +363,13 @@ class Environment:
             if module.kind != module_kind:
                 raise TypeError()
             return module.types[ty.field]
+        elif ty.tag == 'tuple':
+            types = self.check_type_list(ty.types)
+            for ty in types:
+                if ty.kind != star:
+                    print(ty.kind)
+                    raise TypeError()
+            return TypeApplication(Tuple(len(types)), types)
         raise NotImplementedError()
 
     def check_type_list(self, types):
@@ -667,6 +706,20 @@ class Environment:
                     index = index,
                     ty = root.ty.args[0],
                 )
+        elif expr.tag == 'tuple':
+            values = self.check_expression_list(expr.values)
+            types = [value.ty for value in values]
+            return \
+                TypedASTNode(
+                    'tuple',
+                    values = values,
+                    ty = \
+                        TypeApplication(
+                            Tuple(len(values)),
+                            types,
+                        )
+                )
+            raise NotImplementedError()
         print(expr.tag)
         raise NotImplementedError()
 

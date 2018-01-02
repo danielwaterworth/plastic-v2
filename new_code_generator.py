@@ -41,6 +41,13 @@ def array_of(of, size):
             size = size,
         )
 
+def tuple_of(types):
+    return \
+        CGASTNode(
+            'tuple',
+            types = types,
+        )
+
 def func(arg_types, return_type):
     return \
         CGASTNode(
@@ -245,6 +252,21 @@ class FunctionWriter:
         )
         return dst
 
+    def insertvalue(self, struct_ty, struct_val, field_ty, field_val, indices):
+        dst = next(self.variable_names)
+        self.current_basic_block.instructions.append(
+            CGASTNode(
+                'insertvalue',
+                dst = dst,
+                struct_ty = struct_ty,
+                struct_val = struct_val,
+                field_ty = field_ty,
+                field_val = field_val,
+                indices = indices,
+            )
+        )
+        return dst
+
     def not_(self, value):
         dst = next(self.variable_names)
         self.current_basic_block.instructions.append(
@@ -416,6 +438,16 @@ class FunctionWriter:
     def generate_address_of(self, expr):
         return self.generate_l_expr(expr.expr)
 
+    def generate_tuple(self, expr):
+        exprs = self.generate_expressions(expr.values)
+        types = [ty for ty, _ in exprs]
+        output_type = tuple_of(types)
+        output = 'undef'
+        for index, (ty, value) in enumerate(exprs):
+            output = \
+                self.insertvalue(output_type, output, ty, value, [str(index)])
+        return output_type, output
+
     def generate_expression(self, expr):
         if expr.tag == 'variable':
             output = \
@@ -459,6 +491,8 @@ class FunctionWriter:
             return ty, self.binop('sub', '0', value, ty)
         elif expr.tag == 'array_access':
             output = self.generate_array_access(expr)
+        elif expr.tag == 'tuple':
+            output = self.generate_tuple(expr)
         else:
             print(expr.tag)
             raise NotImplementedError()
@@ -721,6 +755,8 @@ class CodeGenerator:
             return ptr_to(self.generate_type(ty.args[0]))
         elif type_checker.is_array(ty):
             return array_of(self.generate_type(ty.args[0]), ty.args[1].n)
+        elif type_checker.is_tuple(ty):
+            return tuple_of(self.generate_type_list(ty.args))
         elif type(ty) == type_checker.StructType:
             return named_type(ty.module_name, ty.name)
         elif type(ty) == type_checker.EnumType:

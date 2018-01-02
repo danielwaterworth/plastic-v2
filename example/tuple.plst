@@ -1,0 +1,14 @@
+define
+  foo
+    <-
+      x: (i32, i32),
+    = {
+      return void;
+    }
+
+define
+  main
+    = {
+      let a = (5 as i32, 4 as i32);
+      foo(a);
+    }
