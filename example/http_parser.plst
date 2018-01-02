@@ -1,0 +1,65 @@
+extern
+  memchr
+    <-
+      ptr(i8),
+      i32,
+      u64,
+    ->
+      ptr(i8)
+
+struct
+  chunk_t
+    data: ptr(i8),
+    size: u64,
+
+enum
+  partial_http_result_t
+    method_chunk(chunk_t),
+    method_end(),
+    request_uri_chunk(chunk_t),
+    request_uri_end(),
+    header_key_chunk(chunk_t),
+    header_key_end(),
+    header_value_chunk(chunk_t),
+    header_value_end(),
+    body_chunk(chunk_t),
+    body_end(),
+
+enum
+  partial_result_t
+    continue(),
+    part(partial_http_result_t),
+
+define
+  parse_request
+    <=
+      chunk_t
+    =>
+      partial_result_t
+    = {
+      let chunk = yield continue();
+      loop {
+        let outcome = memchr(chunk.data, ' ' as i32, chunk.size);
+        if (outcome == null) {
+          yield part(method_chunk(chunk));
+        } else {
+          let new_size = outcome as u64 - chunk.data as u64;
+          yield part(method_chunk(chunk_t(chunk.data, new_size)));
+          yield part(method_end());
+          break;
+        }
+        chunk = yield continue();
+      }
+    }
+
+define
+  main
+    = {
+      let coroutine = parse_request();
+      let empty = chunk_t(null, 0);
+      let test = "GET ";
+      let response =
+        resume@(chunk_t, partial_result_t, void)(coroutine, chunk_t(test, 4));
+      response =
+        resume@(chunk_t, partial_result_t, void)(coroutine, empty);
+    }
