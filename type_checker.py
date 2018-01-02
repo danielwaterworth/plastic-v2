@@ -205,8 +205,13 @@ class FunctionType(TypeLevelExpr):
         return star
 
 class TypeVariable(TypeLevelExpr):
-    def __init__(self, name):
+    def __init__(self, name, kind):
         self.name = name
+        self.k = kind
+
+    @property
+    def kind(self):
+        return self.k
 
     def substitute(self, substitutions):
         return substitutions.get(self.name, self)
@@ -216,11 +221,19 @@ class LambdaType(TypeLevelExpr):
         self.args = args
         self.body = body
 
+    @property
+    def kind(self):
+        arg_kinds = [kind for _, kind in self.args]
+        return FunctionKind(arg_kinds, self.body.kind)
+
     def apply_type_args(self, args):
         if len(args) != len(self.args):
             raise TypeError()
-
-        return self.body.substitute(dict(zip(self.args, args)))
+        for (name, kind), arg in zip(self.args, args):
+            if arg.kind != kind:
+                raise TypeError()
+        names = [name for (name, kind) in self.args]
+        return self.body.substitute(dict(zip(names, args)))
 
     def substitute(self, substitutions):
         substitutions = dict(substitutions)
@@ -375,13 +388,54 @@ class Environment:
     def check_type_list(self, types):
         return [self.check_type(type) for type in types]
 
+    def check_kind(self, kind):
+        if kind.tag == 'star':
+            return star
+        elif kind.tag == 'named_kind':
+            if kind.name == 'nat':
+                return nat
+            raise \
+                TypeError(
+                    'unknown kind %s' % repr(kind.name)
+                )
+        raise NotImplementedError()
+
+    def check_type_params(self, parameters):
+        return [(name, self.check_kind(kind)) for name, kind in parameters]
+
     def check_struct(self, decl):
+        type_param_kinds = self.check_type_params(decl.type_params)
+        type_params = \
+            [(name, TypeVariable(name, kind))
+                for name, kind in type_param_kinds]
+        new_env = \
+            Environment(
+                dict(type_params),
+                {},
+                self,
+            )
+
         struct_type = StructType(self.module_name, decl.name)
-        self.type_bindings[decl.name] = struct_type
-        fields = [(name, self.check_type(ty)) for name, ty in decl.fields]
-        self.term_bindings[decl.name] = \
-            FunctionType('plastic', [ty for _, ty in fields], struct_type)
+        if len(type_param_kinds) > 0:
+            self.type_bindings[decl.name] = \
+                LambdaType(
+                    type_param_kinds,
+                    struct_type,
+                )
+        else:
+            self.type_bindings[decl.name] = struct_type
+        fields = \
+            [(name, new_env.check_type(ty)) for name, ty in decl.fields]
         struct_type.fields = dict(fields)
+
+        if len(type_param_kinds) > 0:
+            raise NotImplementedError()
+        self.term_bindings[decl.name] = \
+            FunctionType(
+                'plastic',
+                [ty for _, ty in fields],
+                struct_type,
+            )
         return \
             TypedASTNode(
                 'struct',
@@ -950,7 +1004,18 @@ class Environment:
             raise NotImplementedError()
 
     def check_function(self, decl):
-        args = [(name, self.check_type(ty)) for name, ty in decl.args]
+        type_param_kinds = self.check_type_params(decl.type_params)
+        type_params = \
+            [(name, TypeVariable(name, kind))
+                for name, kind in type_param_kinds]
+        new_env = \
+            Environment(
+                dict(type_params),
+                {},
+                self,
+            )
+
+        args = [(name, new_env.check_type(ty)) for name, ty in decl.args]
         consume_type = None
         product_type = None
         if decl.consume_type:
@@ -1058,21 +1123,21 @@ global_term_environment = {
     'false': boolean,
     'resume':
         LambdaType(
-            ['a', 'b', 'c'],
+            [('a', star), ('b', star), ('c', star)],
             FunctionType(
                 'plastic',
                 [
                     TypeApplication(
                         Coroutine(),
                         [
-                            TypeVariable('a'),
-                            TypeVariable('b'),
-                            TypeVariable('c'),
+                            TypeVariable('a', star),
+                            TypeVariable('b', star),
+                            TypeVariable('c', star),
                         ]
                     ),
-                    TypeVariable('a'),
+                    TypeVariable('a', star),
                 ],
-                TypeVariable('b'),
+                TypeVariable('b', star),
             )
         )
 }

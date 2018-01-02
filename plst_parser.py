@@ -157,7 +157,7 @@ class Parser:
 
     def parse_struct(self):
         name = self.parse_identifier()
-        type_args = []
+        type_params = []
         fields = []
         if self.next.tag == 'at':
             self.advance()
@@ -166,7 +166,7 @@ class Parser:
                 self.expect('colon')
                 kind = self.parse_kind()
                 self.expect('comma')
-                type_args.append((field_name, kind))
+                type_params.append((field_name, kind))
         if self.next.tag == 'keyword' and self.next.keyword == 'fields':
             self.advance()
             while not self.eof() and self.next.tag == 'identifier':
@@ -179,6 +179,7 @@ class Parser:
             ASTNode(
                 'struct',
                 name = name,
+                type_params = type_params,
                 fields = fields,
             )
 
@@ -547,7 +548,7 @@ class Parser:
 
     def parse_function(self):
         name = self.parse_identifier()
-        type_args = []
+        type_params = []
         args = []
         product_type = None
         consume_type = None
@@ -561,7 +562,7 @@ class Parser:
                 self.expect('colon')
                 kind = self.parse_kind()
                 self.expect('comma')
-                type_args.append((field_name, kind))
+                type_params.append((field_name, kind))
 
         symbol = self.parse_symbol()
         if symbol == "<-":
@@ -597,6 +598,7 @@ class Parser:
             ASTNode(
                 'function',
                 name = name,
+                type_params = type_params,
                 args = args,
                 product_type = product_type,
                 consume_type = consume_type,
