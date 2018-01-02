@@ -9,8 +9,9 @@ extern
 
 struct
   chunk_t
-    data: ptr(i8),
-    size: u64,
+    fields
+      data: ptr(i8),
+      size: u64,
 
 enum
   partial_http_result_t

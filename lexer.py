@@ -21,6 +21,7 @@ keywords = {
     'else',
     'enum',
     'extern',
+    'fields',
     'if',
     'import',
     'let',

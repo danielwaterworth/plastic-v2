@@ -149,13 +149,14 @@ class Parser:
     def parse_struct(self):
         name = self.parse_identifier()
         fields = []
-
-        while not self.eof() and self.next.tag == 'identifier':
-            field_name = self.parse_identifier()
-            self.expect('colon')
-            value = self.parse_type()
-            self.expect('comma')
-            fields.append((field_name, value))
+        if self.next.tag == 'keyword' and self.next.keyword == 'fields':
+            self.advance()
+            while not self.eof() and self.next.tag == 'identifier':
+                field_name = self.parse_identifier()
+                self.expect('colon')
+                value = self.parse_type()
+                self.expect('comma')
+                fields.append((field_name, value))
 
         return \
             ASTNode(

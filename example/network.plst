@@ -20,19 +20,21 @@ constant
 
 struct
   sockaddr
-    sa_family: i16,
-    sa_data: array(i8, 14),
+    fields
+      sa_family: i16,
+      sa_data: array(i8, 14),
 
 struct
   addrinfo
-    ai_flags: i32,
-    ai_family: i32,
-    ai_socktype: i32,
-    ai_protocol: i32,
-    ai_addrlen: u32,
-    ai_addr: ptr(sockaddr),
-    ai_canonname: ptr(i8),
-    ai_next: ptr(addrinfo),
+    fields
+      ai_flags: i32,
+      ai_family: i32,
+      ai_socktype: i32,
+      ai_protocol: i32,
+      ai_addrlen: u32,
+      ai_addr: ptr(sockaddr),
+      ai_canonname: ptr(i8),
+      ai_next: ptr(addrinfo),
 
 extern
   getaddrinfo
@@ -174,8 +176,9 @@ constant
 
 struct
   epoll_event
-    events: u32,
-    data: u64,
+    fields
+      events: u32,
+      data: u64,
 
 extern
   epoll_create1
