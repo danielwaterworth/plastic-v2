@@ -632,7 +632,8 @@ class FunctionWriter:
         if pattern.tag == 'wildcard':
             self.scope[pattern.name] = ty, ptr
         elif pattern.tag == 'constructor':
-            constructor_ptr = self.getelementptr(ty, ptr_to(ty), ptr, ["0", "1"])
+            constructor_ptr = \
+                self.getelementptr(ty, ptr_to(ty), ptr, ["0", "1"])
             constructor_ty = named_type(pattern.ty.module_name, pattern.name)
             key = pattern.ty.module_name, pattern.ty.name
             size = \
