@@ -153,7 +153,7 @@ class Parser:
 
         if self.next.tag == 'keyword' and self.next.keyword == 'constructors':
             self.advance()
-            while self.next.tag == 'identifier':
+            while not self.eof() and self.next.tag == 'identifier':
                 constructor_name = self.parse_identifier()
                 self.expect('open_paren')
                 values = self.parse_type_arg_list()

@@ -3,7 +3,7 @@ enum
     @
       x: *,
     constructors
-      none(),
+      nothing(),
       just(x),
 
 struct
@@ -42,4 +42,11 @@ define
       bool
     = {
       return false;
+    }
+
+define
+  main
+    = {
+      let h = empty@(i32, i32, 10)();
+      insert@(i32, i32, 10)(&h, 5, 5);
     }

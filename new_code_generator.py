@@ -91,6 +91,15 @@ def conditional_branch(condition, true_block, false_block):
             false_block = false_block,
         )
 
+class GenericThing:
+    def __init__(self, name):
+        self.names = map(lambda i: "%s.%d" % (name, i), itertools.count())
+        self.specializations = {}
+
+    def __getitem__(self, key):
+        self.specializations[key] = next(self.names)
+        return self.specializations[key]
+
 class FunctionWriter:
     def __init__(self, code_generator):
         self.code_generator = code_generator
@@ -735,6 +744,7 @@ class CodeGenerator:
         self.constructor_tags = {}
         self.decls = []
         self.module_name = ""
+        self.type_scope = {}
 
     def global_string_constant(self, string):
         value = next(self.string_names)
@@ -768,6 +778,10 @@ class CodeGenerator:
             return number(1)
         elif type(ty) == type_checker.OpaqueNumberType:
             return number(64)
+        elif type(ty) == type_checker.LambdaType:
+            raise NotImplementedError()
+        elif type(ty) == type_checker.TypeVariable:
+            raise NotImplementedError()
         print(ty)
         raise NotImplementedError()
 
@@ -792,56 +806,59 @@ class CodeGenerator:
         ]
 
     def generate_struct(self, decl):
-        fields = \
-            [(name, self.generate_type(ty)) for name, ty in decl.fields]
+        if len(decl.type_params) == 0:
+            fields = \
+                [(name, self.generate_type(ty)) for name, ty in decl.fields]
 
-        return_type = named_type(self.module_name, decl.name)
+            return_type = named_type(self.module_name, decl.name)
 
-        names = [name for name, _ in fields]
-        arg_types = [ty for _, ty in fields]
-        arg_names = ['%' + name for name, _ in fields]
+            names = [name for name, _ in fields]
+            arg_types = [ty for _, ty in fields]
+            arg_names = ['%' + name for name, _ in fields]
 
-        key = self.module_name, decl.name
-        llvm_name = "@%s$$%s" % key
-        self.functions[key] = \
-            ptr_to(func(arg_types, return_type)), llvm_name
+            key = self.module_name, decl.name
+            llvm_name = "@%s$$%s" % key
+            self.functions[key] = \
+                ptr_to(func(arg_types, return_type)), llvm_name
 
-        function_writer = FunctionWriter(self)
-        output_ptr = function_writer.alloca(return_type)
-        key = self.module_name, decl.name
-        self.structs[key] = {}
-        for i, name, ty in zip(itertools.count(), names, arg_types):
-            self.structs[key][name] = (i, ty)
+            function_writer = FunctionWriter(self)
+            output_ptr = function_writer.alloca(return_type)
+            key = self.module_name, decl.name
+            self.structs[key] = {}
+            for i, name, ty in zip(itertools.count(), names, arg_types):
+                self.structs[key][name] = (i, ty)
 
-        for i, name, ty in zip(itertools.count(), arg_names, arg_types):
-            field_ptr = \
-                function_writer.getelementptr(
-                    return_type,
-                    ptr_to(return_type),
-                    output_ptr,
-                    ['0', str(i)]
-                )
-            function_writer.store(field_ptr, ty, name)
-        output = function_writer.load(return_type, output_ptr)
-        function_writer.current_basic_block.terminator = \
-            return_(return_type, output)
+            for i, name, ty in zip(itertools.count(), arg_names, arg_types):
+                field_ptr = \
+                    function_writer.getelementptr(
+                        return_type,
+                        ptr_to(return_type),
+                        output_ptr,
+                        ['0', str(i)]
+                    )
+                function_writer.store(field_ptr, ty, name)
+            output = function_writer.load(return_type, output_ptr)
+            function_writer.current_basic_block.terminator = \
+                return_(return_type, output)
 
-        return [
-            CGASTNode(
-                'struct',
-                module_name = self.module_name,
-                name = decl.name,
-                fields = [ty for _, ty in fields],
-            ),
-            CGASTNode(
-                'define',
-                name = llvm_name,
-                return_type = return_type,
-                args = list(zip(arg_types, arg_names)),
-                basic_blocks = function_writer.basic_blocks,
-                linkage = [],
-            ),
-        ]
+            return [
+                CGASTNode(
+                    'struct',
+                    module_name = self.module_name,
+                    name = decl.name,
+                    fields = [ty for _, ty in fields],
+                ),
+                CGASTNode(
+                    'define',
+                    name = llvm_name,
+                    return_type = return_type,
+                    args = list(zip(arg_types, arg_names)),
+                    basic_blocks = function_writer.basic_blocks,
+                    linkage = [],
+                ),
+            ]
+        else:
+            return []
 
     def size_of(self, ty):
         if ty.tag == 'ptr_to':
@@ -934,78 +951,91 @@ class CodeGenerator:
             )
 
     def generate_enum(self, decl):
-        constructors = \
-            [(name, self.generate_type_list(types))
-             for name, types in decl.constructors]
-        assert len(constructors) <= 256
-
-        constructor_structs = \
-            [self.generate_constructor_struct(name, types)
-             for name, types in constructors]
-
-        key = self.module_name, decl.name
-        self.enums[key] = constructors
-        size = self.calculate_enum_size(constructors)
-
         self.constructor_tags[decl.name] = {}
-        for constructor_tag, (name, types) in enumerate(constructors):
+        for constructor_tag, (name, _) in enumerate(decl.constructors):
             self.constructor_tags[decl.name][name] = constructor_tag
 
-        constructor_functions = \
-            [self.generate_constructor_function(decl.name, name, tag, types)
-             for tag, (name, types) in enumerate(constructors)]
-        return [
-                   CGASTNode(
-                       'struct',
-                       name = decl.name,
-                       module_name = self.module_name,
-                       fields = [
-                           byte,
-                           CGASTNode(
-                               'array',
-                               size = size,
-                               of = byte,
-                           )
-                       ],
-                   )
-               ] + constructor_structs + constructor_functions
+        if len(decl.type_params) == 0:
+            constructors = \
+                [(name, self.generate_type_list(types))
+                    for name, types in decl.constructors]
+            assert len(constructors) <= 256
+
+            constructor_structs = \
+                [self.generate_constructor_struct(name, types)
+                    for name, types in constructors]
+
+            key = self.module_name, decl.name
+            self.enums[key] = constructors
+            size = self.calculate_enum_size(constructors)
+
+            constructor_functions = \
+                [
+                    self.generate_constructor_function(
+                        decl.name,
+                        name,
+                        tag,
+                        types,
+                    )
+                    for tag, (name, types) in enumerate(constructors)
+                ]
+            return [
+                CGASTNode(
+                    'struct',
+                    name = decl.name,
+                    module_name = self.module_name,
+                    fields = [
+                        byte,
+                        CGASTNode(
+                            'array',
+                            size = size,
+                            of = byte,
+                        )
+                    ],
+                )
+            ] + constructor_structs + constructor_functions
+        else:
+            return []
 
     def generate_function(self, decl):
-        return_type = self.generate_type(decl.return_type)
-        function_writer = FunctionWriter(self)
-        args = []
-        arg_types = []
-        arg_dict = {}
-        for arg_name, arg_type in decl.args:
-            llvm_name = '%' + arg_name
-            llvm_type = self.generate_type(arg_type)
-            arg_ptr = function_writer.alloca(llvm_type)
-            function_writer.store(arg_ptr, llvm_type, llvm_name)
-            args.append((llvm_type, llvm_name))
-            arg_types.append(llvm_type)
-            arg_dict[arg_name] = llvm_type, arg_ptr
+        if len(decl.type_params) == 0:
+            return_type = self.generate_type(decl.return_type)
+            function_writer = FunctionWriter(self)
+            args = []
+            arg_types = []
+            arg_dict = {}
+            for arg_name, arg_type in decl.args:
+                llvm_name = '%' + arg_name
+                llvm_type = self.generate_type(arg_type)
+                arg_ptr = function_writer.alloca(llvm_type)
+                function_writer.store(arg_ptr, llvm_type, llvm_name)
+                args.append((llvm_type, llvm_name))
+                arg_types.append(llvm_type)
+                arg_dict[arg_name] = llvm_type, arg_ptr
 
-        function_writer.arg_dict = arg_dict
-        function_writer.generate_statements(decl.body)
+            function_writer.arg_dict = arg_dict
+            function_writer.generate_statements(decl.body)
 
-        if decl.name == 'main':
-            llvm_name = '@main'
+            if decl.name == 'main':
+                llvm_name = '@main'
+            else:
+                llvm_name = "@%s$$%s" % (self.module_name, decl.name)
+
+            function_key = self.module_name, decl.name
+            self.functions[function_key] = \
+                ptr_to(func(arg_types, return_type)), llvm_name
+            return [
+                CGASTNode(
+                    'define',
+                    linkage = [],
+                    name = llvm_name,
+                    args = args,
+                    basic_blocks = function_writer.basic_blocks,
+                    return_type = return_type,
+                ),
+            ]
         else:
-            llvm_name = "@%s$$%s" % (self.module_name, decl.name)
-
-        function_key = self.module_name, decl.name
-        self.functions[function_key] = \
-            ptr_to(func(arg_types, return_type)), llvm_name
-        return [
-            CGASTNode(
-                'define',
-                linkage = [],
-                name = llvm_name,
-                args = args,
-                basic_blocks = function_writer.basic_blocks,
-                return_type = return_type,
-            ),
-        ]
+            return []
 
     def generate_constant(self, decl):
         function_name = next(self.function_names)

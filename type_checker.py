@@ -60,9 +60,6 @@ class Ptr(TypeLevelExpr):
 
 ptr = Ptr()
 
-def ptr_to(ty):
-    return TypeApplication(ptr, [ty])
-
 class Array(TypeLevelExpr):
     kind = FunctionKind([star, nat], star)
 
@@ -112,6 +109,9 @@ class Boolean(TypeLevelExpr):
     def __eq__(self, other):
         return type(other) == Boolean
 
+    def __repr__(self):
+        return 'boolean'
+
 boolean = Boolean()
 
 class NumberType(TypeLevelExpr):
@@ -152,7 +152,7 @@ class TypeApplication(TypeLevelExpr):
 
     def substitute(self, substitutions):
         return \
-            TypeApplication(
+            type_apply(
                 self.function.substitute(substitutions),
                 [arg.substitute(substitutions) for arg in self.args],
             )
@@ -164,21 +164,98 @@ class TypeApplication(TypeLevelExpr):
             tuple(self.args) == tuple(other.args)
 
     def __repr__(self):
-        return "TypeApplication(%s, %s)" % (self.function, self.args)
+        return "type_apply(%s, %s)" % (self.function, self.args)
+
+def type_apply(fn, args):
+    if type(fn.kind) != FunctionKind:
+        raise \
+            TypeError(
+                "type function applied to wrong number of arguments"
+            )
+    fn_arg_kinds = fn.kind.arg_kinds
+    arg_kinds = [arg.kind for arg in args]
+    if tuple(fn_arg_kinds) != tuple(arg_kinds):
+        raise TypeError()
+    if type(fn) == LambdaType:
+        names = [name for name, _ in fn.args]
+        substitutions = dict(zip(names, args))
+        return fn.body.substitute(substitutions)
+    else:
+        return TypeApplication(fn, args)
+
+def ptr_to(ty):
+    return type_apply(ptr, [ty])
 
 class StructType(TypeLevelExpr):
     kind = star
 
-    def __init__(self, module_name, name):
+    def __init__(self, module_name, name, type_args):
         self.module_name = module_name
         self.name = name
+        self.type_args = type_args
+
+    def substitute(self, substitutions):
+        return \
+            StructType(
+                self.module_name,
+                self.name,
+                [type_arg.substitute(substitutions)
+                    for type_arg in self.type_args],
+            )
+
+    def __eq__(self, other):
+        return \
+            type(other) == StructType and \
+            self.module_name == other.module_name and \
+            self.name == other.name and \
+            tuple(self.type_args) == tuple(other.type_args)
+
+    def __str__(self):
+        return \
+            "StructType(%s, %s, %s)" % (
+                self.module_name,
+                self.name,
+                self.type_args,
+            )
 
 class EnumType(TypeLevelExpr):
     kind = star
 
-    def __init__(self, module_name, name):
+    def __init__(self, module_name, name, type_args, constructors=None):
         self.module_name = module_name
         self.name = name
+        self.type_args = type_args
+        self.constructors = constructors
+
+    def substitute(self, substitutions):
+        new_constructors = {}
+        for name, tys in self.constructors.items():
+            new_constructors[name] = \
+                [ty.substitute(substitutions) for ty in tys]
+        return \
+            EnumType(
+                self.module_name,
+                self.name,
+                [type_arg.substitute(substitutions)
+                    for type_arg in self.type_args],
+                new_constructors,
+            )
+
+    def __eq__(self, other):
+        return \
+            type(other) == EnumType and \
+            self.module_name == other.module_name and \
+            self.name == other.name and \
+            tuple(self.type_args) == tuple(other.type_args)
+
+    def __str__(self):
+        return \
+            "EnumType(%s, %s, %s, %s)" % (
+                self.module_name,
+                self.name,
+                self.type_args,
+                self.constructors,
+            )
 
 class Coroutine(TypeLevelExpr):
     kind = FunctionKind([star] * 3, star)
@@ -204,6 +281,14 @@ class FunctionType(TypeLevelExpr):
     def kind(self):
         return star
 
+    def __repr__(self):
+        return \
+            "FunctionType(%s, %s, %s)" % (
+                repr(self.calling_convention),
+                self.arg_types,
+                self.return_type
+            )
+
 class TypeVariable(TypeLevelExpr):
     def __init__(self, name, kind):
         self.name = name
@@ -216,6 +301,9 @@ class TypeVariable(TypeLevelExpr):
     def substitute(self, substitutions):
         return substitutions.get(self.name, self)
 
+    def __repr__(self):
+        return "TypeVariable(%s, %s)" % (self.name, self.k)
+
 class LambdaType(TypeLevelExpr):
     def __init__(self, args, body):
         self.args = args
@@ -226,20 +314,14 @@ class LambdaType(TypeLevelExpr):
         arg_kinds = [kind for _, kind in self.args]
         return FunctionKind(arg_kinds, self.body.kind)
 
-    def apply_type_args(self, args):
-        if len(args) != len(self.args):
-            raise TypeError()
-        for (name, kind), arg in zip(self.args, args):
-            if arg.kind != kind:
-                raise TypeError()
-        names = [name for (name, kind) in self.args]
-        return self.body.substitute(dict(zip(names, args)))
-
     def substitute(self, substitutions):
         substitutions = dict(substitutions)
         for arg in self.args:
             del substitutions[arg]
         return self.body.substitute(substitutions)
+
+    def __repr__(self):
+        return "LambdaType(%s, %s)" % (self.args, self.body)
 
 char = NumberType(True, 8)
 char_ptr = ptr_to(char)
@@ -364,11 +446,7 @@ class Environment:
             args = self.check_type_list(ty.args)
             arg_kinds = [arg.kind for arg in args]
             function_kind = function.kind
-            if type(function_kind) != FunctionKind:
-                raise TypeError()
-            if tuple(function_kind.arg_kinds) != tuple(arg_kinds):
-                raise TypeError()
-            return TypeApplication(function, args)
+            return type_apply(function, args)
         elif ty.tag == 'type_number':
             return NatLiteral(ty.n)
         elif ty.tag == 'field_access':
@@ -378,11 +456,7 @@ class Environment:
             return module.types[ty.field]
         elif ty.tag == 'tuple':
             types = self.check_type_list(ty.types)
-            for ty in types:
-                if ty.kind != star:
-                    print(ty.kind)
-                    raise TypeError()
-            return TypeApplication(Tuple(len(types)), types)
+            return type_apply(Tuple(len(types)), types)
         raise NotImplementedError()
 
     def check_type_list(self, types):
@@ -408,6 +482,7 @@ class Environment:
         type_params = \
             [(name, TypeVariable(name, kind))
                 for name, kind in type_param_kinds]
+        type_args = [arg for _, arg in type_params]
         new_env = \
             Environment(
                 dict(type_params),
@@ -415,7 +490,7 @@ class Environment:
                 self,
             )
 
-        struct_type = StructType(self.module_name, decl.name)
+        struct_type = StructType(self.module_name, decl.name, type_args)
         if len(type_param_kinds) > 0:
             self.type_bindings[decl.name] = \
                 LambdaType(
@@ -451,6 +526,7 @@ class Environment:
                 'struct',
                 name = decl.name,
                 fields = fields,
+                type_params = type_params,
             )
 
     def check_enum(self, decl):
@@ -458,6 +534,7 @@ class Environment:
         type_params = \
             [(name, TypeVariable(name, kind))
                 for name, kind in type_param_kinds]
+        type_args = [arg for _, arg in type_params]
         new_env = \
             Environment(
                 dict(type_params),
@@ -465,7 +542,7 @@ class Environment:
                 self,
             )
 
-        enum_type = EnumType(self.module_name, decl.name)
+        enum_type = EnumType(self.module_name, decl.name, type_args)
         if len(type_param_kinds) > 0:
             self.type_bindings[decl.name] = \
                 LambdaType(
@@ -497,6 +574,7 @@ class Environment:
                 'enum',
                 name = decl.name,
                 constructors = constructors,
+                type_params = type_params,
             )
 
     def check_extern(self, decl):
@@ -529,11 +607,15 @@ class Environment:
             args = self.check_expression_list(expr.args)
             arg_types = [arg.ty for arg in args]
             if type(function.ty) != FunctionType:
-                raise TypeError()
+                if type(function.ty) == LambdaType:
+                    raise TypeError("Need to specify type args first")
+                else:
+                    raise TypeError()
             if not len(arg_types) == len(function.ty.arg_types):
                 raise TypeError()
             new_args = []
-            for actual, expected, value in zip(arg_types, function.ty.arg_types, args):
+            iterator = zip(arg_types, function.ty.arg_types, args)
+            for actual, expected, value in iterator:
                 if not actual.substitutable_for(expected):
                     raise \
                         TypeError(
@@ -735,11 +817,14 @@ class Environment:
                 )
         elif expr.tag == 'apply_type_args':
             function = self.check_expression(expr.function)
-            args = self.check_type_list(expr.args)
             if type(function.ty) != LambdaType:
-                raise TypeError()
+                raise \
+                    TypeError(
+                        'Expected %s to be a LambdaType' % function.ty
+                    )
+            args = self.check_type_list(expr.args)
+            new_type = type_apply(function.ty, args)
 
-            new_type = function.ty.apply_type_args(args)
             return \
                 TypedASTNode(
                     'apply_type_args',
@@ -747,7 +832,6 @@ class Environment:
                     args = args,
                     ty = new_type,
                 )
-            raise NotImplementedError()
         elif expr.tag == 'address_of':
             expr = self.check_l_expression(expr.expr)
             return \
@@ -808,7 +892,7 @@ class Environment:
                     'tuple',
                     values = values,
                     ty = \
-                        TypeApplication(
+                        type_apply(
                             Tuple(len(values)),
                             types,
                         )
@@ -920,8 +1004,14 @@ class Environment:
                 new_env = self
             elif first_statement.tag == 'return':
                 expr = self.check_expression(first_statement.expr)
-                if expr.ty != self.return_type:
-                    raise TypeError()
+                if not expr.ty.substitutable_for(self.return_type):
+                    raise \
+                        TypeError(
+                            'can\'t return %s for %s' % (
+                                expr.ty,
+                                self.return_type,
+                            )
+                        )
                 statement = \
                     TypedASTNode(
                         'return',
@@ -946,6 +1036,7 @@ class Environment:
 
     def check_constructor_pattern(self, enum_type, pattern):
         if type(enum_type) != EnumType:
+            print(enum_type)
             raise TypeError()
         constructor = enum_type.constructors[pattern.name]
         if len(pattern.args) != len(constructor):
@@ -1065,23 +1156,32 @@ class Environment:
         return_type = new_env.check_type(decl.return_type)
 
         if consume_type or product_type:
-            self.term_bindings[decl.name] = \
+            fn_type = \
                 FunctionType(
                     'plastic',
                     [ty for _, ty in args],
-                    TypeApplication(Coroutine(), [
-                        consume_type or Void(),
-                        product_type or Void(),
+                    type_apply(Coroutine(), [
+                        consume_type or void,
+                        product_type or void,
                         return_type,
                     ]),
                 )
         else:
-            self.term_bindings[decl.name] = \
+            fn_type = \
                 FunctionType(
                     'plastic',
                     [ty for _, ty in args],
                     return_type,
                 )
+
+        if len(type_params) > 0:
+            self.term_bindings[decl.name] = \
+                LambdaType(
+                    type_param_kinds,
+                    fn_type,
+                )
+        else:
+            self.term_bindings[decl.name] = fn_type
 
         new_env = \
             Environment(
@@ -1097,6 +1197,7 @@ class Environment:
             TypedASTNode(
                 'function',
                 name = decl.name,
+                type_params = type_params,
                 args = args,
                 consume_type = consume_type,
                 product_type = product_type,
@@ -1167,7 +1268,7 @@ global_term_environment = {
             FunctionType(
                 'plastic',
                 [
-                    TypeApplication(
+                    type_apply(
                         Coroutine(),
                         [
                             TypeVariable('a', star),
