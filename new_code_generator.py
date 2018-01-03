@@ -1,5 +1,6 @@
 import itertools
 import type_checker
+import collections
 
 class CGASTNode:
     def __init__(self, tag, **kwargs):
@@ -8,8 +9,20 @@ class CGASTNode:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
+    @property
+    def sorted_attr_tuple(self):
+        return tuple(sorted(self.attributes.items()))
+
     def __repr__(self):
         return "CGASTNode(%s, %s)" % (repr(self.tag), repr(self.attributes))
+
+    def __hash__(self):
+        return hash((self.tag, self.sorted_attr_tuple))
+
+    def __eq__(self, other):
+        return \
+            self.tag == other.tag and \
+            self.sorted_attr_tuple == other.sorted_attr_tuple
 
 def number(width):
     return  \
@@ -18,12 +31,13 @@ def number(width):
             width = width,
         )
 
-def named_type(module_name, name):
+def named_type(module_name, name, version=0):
     return  \
         CGASTNode(
             'named_type',
             module_name = module_name,
             name = name,
+            version = version,
         )
 
 def ptr_to(ty):
@@ -45,7 +59,7 @@ def tuple_of(types):
     return \
         CGASTNode(
             'tuple',
-            types = types,
+            types = tuple(types),
         )
 
 def func(arg_types, return_type):
@@ -54,6 +68,13 @@ def func(arg_types, return_type):
             'func',
             arg_types = arg_types,
             return_type = return_type,
+        )
+
+def nat(n):
+    return \
+        CGASTNode(
+            'nat',
+            n = n,
         )
 
 void = \
@@ -91,14 +112,39 @@ def conditional_branch(condition, true_block, false_block):
             false_block = false_block,
         )
 
-class GenericThing:
-    def __init__(self, name):
-        self.names = map(lambda i: "%s.%d" % (name, i), itertools.count())
+class GenericFunction:
+    def __init__(self, module_name, name, decl):
+        self.decl = decl
+        self.module_name = module_name
+        self.name = name
+        self.versions = itertools.count()
         self.specializations = {}
 
-    def __getitem__(self, key):
-        self.specializations[key] = next(self.names)
-        return self.specializations[key]
+    def specialize(self, code_generator, args):
+        args = tuple(args)
+        if not args in self.specializations:
+            scope = dict(code_generator.type_scope)
+
+            for (name, _), ty in zip(self.decl.type_params, args):
+                code_generator.type_scope[name] = ty
+
+            arg_types = \
+                [code_generator.generate_type(ty) for _, ty in self.decl.args]
+
+            return_type = code_generator.generate_type(self.decl.return_type)
+            code_generator.type_scope = scope
+
+            version = next(self.versions)
+            code_generator.generate_function_specialization(
+                self.decl,
+                args,
+                version,
+            )
+
+            llvm_name = "@%s$$%s.%d" % (self.module_name, self.name, version)
+            self.specializations[args] = \
+                ptr_to(func(arg_types, return_type)), llvm_name
+        return self.specializations[args]
 
 class FunctionWriter:
     def __init__(self, code_generator):
@@ -293,8 +339,8 @@ class FunctionWriter:
     def generate_type(self, ty):
         return self.code_generator.generate_type(ty)
 
-    def generate_type_list(self, ty):
-        return self.code_generator.generate_type_list(ty)
+    def generate_type_list(self, tys):
+        return self.code_generator.generate_type_list(tys)
 
     def generate_variable(self, name, module_name):
         if name == 'void':
@@ -307,11 +353,11 @@ class FunctionWriter:
             return byte_ptr, 'null'
         elif (module_name, name) in self.code_generator.functions:
             return self.code_generator.functions[(module_name, name)]
-        elif name in self.scope:
-            ty, ptr = self.scope[name]
-            return ty, self.load(ty, ptr)
         elif (module_name, name) in self.code_generator.constants:
             ty, ptr = self.code_generator.constants[(module_name, name)]
+            return ty, self.load(ty, ptr)
+        elif name in self.scope:
+            ty, ptr = self.scope[name]
             return ty, self.load(ty, ptr)
         elif name in self.arg_dict:
             ty, ptr = self.arg_dict[name]
@@ -337,8 +383,8 @@ class FunctionWriter:
     def generate_field_access_l(self, expr):
         struct_ty, ptr = self.generate_l_expr(expr.l_expr)
         field = expr.field
-        key = struct_ty.ty.module_name, struct_ty.ty.name
-        index, field_ty = self.code_generator.structs[key][field]
+        key = struct_ty.ty.module_name, struct_ty.ty.name, ()
+        index, field_ty = self.code_generator.struct_fields[key][field]
         field_ptr = \
             self.getelementptr(struct_ty.ty, struct_ty, ptr, ['0', str(index)])
         return ptr_to(field_ty), field_ptr
@@ -364,8 +410,8 @@ class FunctionWriter:
     def generate_struct_field_access(self, expr):
         struct_ty, value = self.generate_expression(expr.x)
         field = expr.field
-        key = struct_ty.module_name, struct_ty.name
-        index, field_ty = self.code_generator.structs[key][field]
+        key = struct_ty.module_name, struct_ty.name, ()
+        index, field_ty = self.code_generator.struct_fields[key][field]
         return field_ty, self.extractvalue(struct_ty, value, [index])
 
     def generate_module_field_access(self, expr):
@@ -442,7 +488,10 @@ class FunctionWriter:
         return byte_ptr, self.getelementptr(ty, ptr_to(ty), value, ["0", "0"])
 
     def generate_apply_type_args(self, expr):
-        raise NotImplementedError()
+        _, function = self.generate_expression(expr.function)
+        assert isinstance(function, GenericFunction)
+        args = self.generate_type_list(expr.args)
+        return function.specialize(self.code_generator, args)
 
     def generate_address_of(self, expr):
         return self.generate_l_expr(expr.expr)
@@ -732,6 +781,8 @@ class FunctionWriter:
 
 class CodeGenerator:
     def __init__(self):
+        self.typed_struct_decls = {}
+        self.typed_enum_decls = {}
         self.string_names = map(lambda i: "@string.%d" % i, itertools.count())
         self.function_names = \
             map(lambda i: "@function.%d" % i, itertools.count())
@@ -739,10 +790,16 @@ class CodeGenerator:
         self.functions = {}
         self.constants = {}
         self.initializers = []
-        self.structs = {}
+        self.struct_fields = {}
+        self.data_version_counters = \
+            collections.defaultdict(lambda : itertools.count())
+        self.data_versions = {}
         self.enums = {}
         self.constructor_tags = {}
-        self.decls = []
+        self.declare_decls = []
+        self.global_decls = []
+        self.struct_decls = []
+        self.function_decls = []
         self.module_name = ""
         self.type_scope = {}
 
@@ -765,13 +822,27 @@ class CodeGenerator:
         elif type_checker.is_ptr(ty):
             return ptr_to(self.generate_type(ty.args[0]))
         elif type_checker.is_array(ty):
-            return array_of(self.generate_type(ty.args[0]), ty.args[1].n)
+            of = self.generate_type(ty.args[0])
+            n = self.generate_type(ty.args[1])
+            return array_of(of, n.n)
         elif type_checker.is_tuple(ty):
             return tuple_of(self.generate_type_list(ty.args))
         elif type(ty) == type_checker.StructType:
-            return named_type(ty.module_name, ty.name)
+            if len(ty.type_args) > 0:
+                type_args = self.generate_type_list(ty.type_args)
+                version = \
+                    self.struct_version(ty.module_name, ty.name, type_args)
+                return named_type(ty.module_name, ty.name, version)
+            else:
+                return named_type(ty.module_name, ty.name)
         elif type(ty) == type_checker.EnumType:
-            return named_type(ty.module_name, ty.name)
+            if len(ty.type_args) > 0:
+                type_args = self.generate_type_list(ty.type_args)
+                version = \
+                    self.enum_version(ty.module_name, ty.name, type_args)
+                return named_type(ty.module_name, ty.name, version)
+            else:
+                return named_type(ty.module_name, ty.name)
         elif type(ty) == type_checker.Void:
             return void
         elif type(ty) == type_checker.Boolean:
@@ -781,7 +852,9 @@ class CodeGenerator:
         elif type(ty) == type_checker.LambdaType:
             raise NotImplementedError()
         elif type(ty) == type_checker.TypeVariable:
-            raise NotImplementedError()
+            return self.type_scope[ty.name]
+        elif type(ty) == type_checker.NatLiteral:
+            return nat(ty.n)
         print(ty)
         raise NotImplementedError()
 
@@ -796,69 +869,123 @@ class CodeGenerator:
         self.functions[key] = \
             ptr_to(func(arg_types, return_type)), '@' + decl.name
 
-        return [
+        self.declare_decls.append(
             CGASTNode(
                 'declare',
                 name = '@' + decl.name,
                 return_type = return_type,
                 arg_types = arg_types,
             )
-        ]
+        )
+
+    def struct_version(self, module_name, name, type_args):
+        key = (module_name, name, tuple(type_args))
+        if not key in self.data_versions:
+            version = \
+                next(self.data_version_counters[(module_name, name)])
+            self.data_versions[key] = version
+            self.generate_struct_struct(module_name, name, type_args, version)
+        return self.data_versions[key]
+
+    def enum_version(self, module_name, name, type_args):
+        key = (module_name, name, tuple(type_args))
+        if not key in self.data_versions:
+            version = \
+                next(self.data_version_counters[(module_name, name)])
+            self.data_versions[key] = version
+            self.generate_enum_structs(module_name, name, type_args, version)
+        return self.data_versions[key]
+
+    def generate_struct_constructor(self, module_name, name, type_args):
+        decl = self.typed_struct_decls[(module_name, name)]
+        if len(type_args) != 0:
+            raise NotImplementedError()
+
+        fields = \
+            [(name, self.generate_type(ty)) for name, ty in decl.fields]
+
+        return_type = named_type(self.module_name, decl.name)
+
+        arg_types = [ty for _, ty in fields]
+        arg_names = ['%' + name for name, _ in fields]
+
+        key = self.module_name, decl.name
+        llvm_name = "@%s$$%s" % key
+
+        function_writer = FunctionWriter(self)
+        output_ptr = function_writer.alloca(return_type)
+
+        field_descriptors = {}
+        for i, (name, ty) in zip(itertools.count(), fields):
+            field_descriptors[name] = (i, ty)
+        key = module_name, decl.name, ()
+        self.struct_fields[key] = field_descriptors
+
+        for i, name, ty in zip(itertools.count(), arg_names, arg_types):
+            field_ptr = \
+                function_writer.getelementptr(
+                    return_type,
+                    ptr_to(return_type),
+                    output_ptr,
+                    ['0', str(i)]
+                )
+            function_writer.store(field_ptr, ty, name)
+        output = function_writer.load(return_type, output_ptr)
+        function_writer.current_basic_block.terminator = \
+            return_(return_type, output)
+
+        self.function_decls.append(
+            CGASTNode(
+                'define',
+                name = llvm_name,
+                return_type = return_type,
+                args = list(zip(arg_types, arg_names)),
+                basic_blocks = function_writer.basic_blocks,
+                linkage = [],
+            ),
+        )
+
+    def generate_struct_struct(self, module_name, name, type_args, version):
+        decl = self.typed_struct_decls[(module_name, name)]
+
+        scope = dict(self.type_scope)
+        for (name, _), ty in zip(decl.type_params, type_args):
+            self.type_scope[name] = ty
+
+        fields = \
+            [(name, self.generate_type(ty)) for name, ty in decl.fields]
+
+        self.type_scope = scope
+
+        field_descriptors = {}
+        for i, (name, ty) in zip(itertools.count(), fields):
+            field_descriptors[name] = (i, ty)
+        key = module_name, decl.name, tuple(type_args)
+        self.struct_fields[key] = field_descriptors
+
+        self.struct_decls.append(
+            CGASTNode(
+                'struct',
+                module_name = self.module_name,
+                name = decl.name,
+                version = version,
+                fields = [ty for _, ty in fields],
+            ),
+        )
 
     def generate_struct(self, decl):
+        self.typed_struct_decls[(self.module_name, decl.name)] = decl
         if len(decl.type_params) == 0:
+            self.generate_struct_struct(self.module_name, decl.name, ())
+            self.generate_struct_constructor(self.module_name, decl.name, ())
             fields = \
                 [(name, self.generate_type(ty)) for name, ty in decl.fields]
-
             return_type = named_type(self.module_name, decl.name)
-
-            names = [name for name, _ in fields]
             arg_types = [ty for _, ty in fields]
-            arg_names = ['%' + name for name, _ in fields]
-
             key = self.module_name, decl.name
             llvm_name = "@%s$$%s" % key
             self.functions[key] = \
                 ptr_to(func(arg_types, return_type)), llvm_name
-
-            function_writer = FunctionWriter(self)
-            output_ptr = function_writer.alloca(return_type)
-            key = self.module_name, decl.name
-            self.structs[key] = {}
-            for i, name, ty in zip(itertools.count(), names, arg_types):
-                self.structs[key][name] = (i, ty)
-
-            for i, name, ty in zip(itertools.count(), arg_names, arg_types):
-                field_ptr = \
-                    function_writer.getelementptr(
-                        return_type,
-                        ptr_to(return_type),
-                        output_ptr,
-                        ['0', str(i)]
-                    )
-                function_writer.store(field_ptr, ty, name)
-            output = function_writer.load(return_type, output_ptr)
-            function_writer.current_basic_block.terminator = \
-                return_(return_type, output)
-
-            return [
-                CGASTNode(
-                    'struct',
-                    module_name = self.module_name,
-                    name = decl.name,
-                    fields = [ty for _, ty in fields],
-                ),
-                CGASTNode(
-                    'define',
-                    name = llvm_name,
-                    return_type = return_type,
-                    args = list(zip(arg_types, arg_names)),
-                    basic_blocks = function_writer.basic_blocks,
-                    linkage = [],
-                ),
-            ]
-        else:
-            return []
 
     def size_of(self, ty):
         if ty.tag == 'ptr_to':
@@ -866,13 +993,15 @@ class CodeGenerator:
         elif ty.tag == 'number':
             return ty.width // 8
         elif ty.tag == 'named_type':
-            key = (ty.module_name, ty.name)
+            key = (ty.module_name, ty.name, ())
             if key in self.structs:
-                fields = self.structs[key]
+                fields = self.struct_fields[key]
                 return sum([self.size_of(ty) for _, ty in fields.values()])
             if key in self.enums:
                 constructors = self.enums[key]
                 return self.calculate_enum_size(constructors)
+        elif ty.tag == 'tuple':
+            return sum([self.size_of(t) for t in ty.types])
         print(ty)
         raise NotImplementedError()
 
@@ -885,14 +1014,16 @@ class CodeGenerator:
             size = max(size, constructor_size)
         return size
 
-    def generate_constructor_struct(self, name, types):
-        return \
+    def generate_constructor_struct(self, name, version, types):
+        self.struct_decls.append(
             CGASTNode(
                 'struct',
                 module_name = self.module_name,
                 name = name,
+                version = version,
                 fields = types,
-            )
+            ),
+        )
 
     def generate_constructor_function(self, enum_name, name, tag, types):
         args = \
@@ -915,7 +1046,7 @@ class CodeGenerator:
                 ptr,
                 ["0", "1"]
             )
-        key = self.module_name, enum_name
+        key = self.module_name, enum_name, ()
         size = self.calculate_enum_size(self.enums[key])
         enum_data_type = named_type(self.module_name, name)
         data_ptr = \
@@ -940,7 +1071,8 @@ class CodeGenerator:
         llvm_name = "@%s$$%s" % function_key
         self.functions[function_key] = \
             ptr_to(func(types, return_type)), llvm_name
-        return \
+
+        self.function_decls.append(
             CGASTNode(
                 'define',
                 name = llvm_name,
@@ -948,94 +1080,144 @@ class CodeGenerator:
                 args = args,
                 basic_blocks = function_writer.basic_blocks,
                 linkage = [],
+            ),
+        )
+
+    def generate_enum_constructors(self, module_name, name, type_args):
+        decl = self.typed_enum_decls[(module_name, name)]
+
+        scope = dict(self.type_scope)
+        for (name, _), ty in zip(decl.type_params, type_args):
+            self.type_scope[name] = ty
+
+        constructors = \
+            [(name, self.generate_type_list(types))
+                for name, types in decl.constructors]
+
+        self.type_scope = scope
+
+        raise NotImplementedError()
+        for tag, (name, types) in enumerate(constructors):
+            self.generate_constructor_function(
+                decl.name,
+                name,
+                tag,
+                types,
             )
 
+    def generate_enum_structs(self, module_name, name, type_args, version):
+        decl = self.typed_enum_decls[(module_name, name)]
+        scope = dict(self.type_scope)
+        for (name, _), ty in zip(decl.type_params, type_args):
+            self.type_scope[name] = ty
+
+        constructors = \
+            [(name, self.generate_type_list(types))
+                for name, types in decl.constructors]
+
+        self.type_scope = scope
+
+        key = self.module_name, decl.name, tuple(type_args)
+        self.enums[key] = constructors
+        assert len(constructors) <= 256
+
+        for name, types in constructors:
+            self.generate_constructor_struct(name, version, types)
+
+        size = self.calculate_enum_size(constructors)
+
+        self.struct_decls.append(
+            CGASTNode(
+                'struct',
+                module_name = self.module_name,
+                name = decl.name,
+                version = version,
+                fields = [
+                    byte,
+                    CGASTNode(
+                        'array',
+                        size = size,
+                        of = byte,
+                    )
+                ],
+            )
+        )
+
     def generate_enum(self, decl):
+        self.typed_enum_decls[(self.module_name, decl.name)] = decl
         self.constructor_tags[decl.name] = {}
         for constructor_tag, (name, _) in enumerate(decl.constructors):
             self.constructor_tags[decl.name][name] = constructor_tag
 
         if len(decl.type_params) == 0:
-            constructors = \
-                [(name, self.generate_type_list(types))
-                    for name, types in decl.constructors]
-            assert len(constructors) <= 256
+            self.generate_enum_constructors(self.module_name, decl.name, ())
+            self.generate_enum_structs(self.module_name, decl.name, ())
 
-            constructor_structs = \
-                [self.generate_constructor_struct(name, types)
-                    for name, types in constructors]
+    def generate_function_specialization(self, decl, type_args, version):
+        function_writer = FunctionWriter(self)
 
-            key = self.module_name, decl.name
-            self.enums[key] = constructors
-            size = self.calculate_enum_size(constructors)
+        scope = dict(self.type_scope)
+        for (name, _), ty in zip(decl.type_params, type_args):
+            self.type_scope[name] = ty
 
-            constructor_functions = \
-                [
-                    self.generate_constructor_function(
-                        decl.name,
-                        name,
-                        tag,
-                        types,
-                    )
-                    for tag, (name, types) in enumerate(constructors)
-                ]
-            return [
-                CGASTNode(
-                    'struct',
-                    name = decl.name,
-                    module_name = self.module_name,
-                    fields = [
-                        byte,
-                        CGASTNode(
-                            'array',
-                            size = size,
-                            of = byte,
-                        )
-                    ],
-                )
-            ] + constructor_structs + constructor_functions
+        return_type = self.generate_type(decl.return_type)
+        args = []
+        arg_types = []
+        arg_dict = {}
+        for arg_name, arg_type in decl.args:
+            llvm_name = '%' + arg_name
+            llvm_type = self.generate_type(arg_type)
+            arg_ptr = function_writer.alloca(llvm_type)
+            function_writer.store(arg_ptr, llvm_type, llvm_name)
+            args.append((llvm_type, llvm_name))
+            arg_types.append(llvm_type)
+            arg_dict[arg_name] = llvm_type, arg_ptr
+
+        function_writer.arg_dict = arg_dict
+        function_writer.generate_statements(decl.body)
+
+        if decl.name == 'main':
+            llvm_name = '@main'
         else:
-            return []
+            llvm_name = "@%s$$%s.%d" % (self.module_name, decl.name, version)
+
+        function_key = self.module_name, decl.name
+        self.functions[function_key] = \
+            ptr_to(func(arg_types, return_type)), llvm_name
+        self.function_decls.append(
+            CGASTNode(
+                'define',
+                linkage = [],
+                name = llvm_name,
+                args = args,
+                basic_blocks = function_writer.basic_blocks,
+                return_type = return_type,
+            ),
+        )
+
+        self.type_scope = scope
 
     def generate_function(self, decl):
         if len(decl.type_params) == 0:
-            return_type = self.generate_type(decl.return_type)
-            function_writer = FunctionWriter(self)
-            args = []
-            arg_types = []
-            arg_dict = {}
-            for arg_name, arg_type in decl.args:
-                llvm_name = '%' + arg_name
-                llvm_type = self.generate_type(arg_type)
-                arg_ptr = function_writer.alloca(llvm_type)
-                function_writer.store(arg_ptr, llvm_type, llvm_name)
-                args.append((llvm_type, llvm_name))
-                arg_types.append(llvm_type)
-                arg_dict[arg_name] = llvm_type, arg_ptr
+            self.generate_function_specialization(decl, (), 0)
 
-            function_writer.arg_dict = arg_dict
-            function_writer.generate_statements(decl.body)
+            return_type = self.generate_type(decl.return_type)
+            arg_types = []
+            for arg_name, arg_type in decl.args:
+                llvm_type = self.generate_type(arg_type)
+                arg_types.append(llvm_type)
 
             if decl.name == 'main':
                 llvm_name = '@main'
             else:
-                llvm_name = "@%s$$%s" % (self.module_name, decl.name)
+                llvm_name = "@%s$$%s.0" % (self.module_name, decl.name)
 
             function_key = self.module_name, decl.name
             self.functions[function_key] = \
                 ptr_to(func(arg_types, return_type)), llvm_name
-            return [
-                CGASTNode(
-                    'define',
-                    linkage = [],
-                    name = llvm_name,
-                    args = args,
-                    basic_blocks = function_writer.basic_blocks,
-                    return_type = return_type,
-                ),
-            ]
         else:
-            return []
+            self.functions[(self.module_name, decl.name)] = \
+                None, GenericFunction(self.module_name, decl.name, decl)
 
     def generate_constant(self, decl):
         function_name = next(self.function_names)
@@ -1047,12 +1229,14 @@ class CodeGenerator:
         key = self.module_name, decl.name
         self.constants[key] = ty, llvm_name
         self.initializers.append(function_name)
-        return [
+        self.global_decls.append(
             CGASTNode(
                 'global',
                 name = llvm_name,
                 ty = ty,
             ),
+        )
+        self.function_decls.append(
             CGASTNode(
                 'define',
                 linkage = [],
@@ -1061,28 +1245,28 @@ class CodeGenerator:
                 basic_blocks = function_writer.basic_blocks,
                 return_type = void,
             ),
-        ]
+        )
 
     def generate_decl(self, decl):
         if decl.tag == 'extern':
-            return self.generate_extern(decl)
+            self.generate_extern(decl)
         elif decl.tag == 'struct':
-            return self.generate_struct(decl)
+            self.generate_struct(decl)
         elif decl.tag == 'enum':
-            return self.generate_enum(decl)
+            self.generate_enum(decl)
         elif decl.tag == 'function':
-            return self.generate_function(decl)
+            self.generate_function(decl)
         elif decl.tag == 'constant':
-            return self.generate_constant(decl)
+            self.generate_constant(decl)
         elif decl.tag == 'import':
-            return []
-        raise NotImplementedError()
+            pass
+        else:
+            raise NotImplementedError()
 
     def generate(self, module_name, decls):
         self.module_name = module_name
-        self.decls.extend(
-            concat([self.generate_decl(decl) for decl in decls])
-        )
+        for decl in decls:
+            self.generate_decl(decl)
 
     def get_decls(self):
         constructors = [
@@ -1091,4 +1275,10 @@ class CodeGenerator:
                 funcs = self.initializers,
             ),
         ]
-        return self.strings + self.decls + constructors
+        return \
+            self.strings + \
+            self.struct_decls + \
+            self.declare_decls + \
+            self.global_decls + \
+            self.function_decls + \
+            constructors

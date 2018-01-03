@@ -302,7 +302,7 @@ class TypeVariable(TypeLevelExpr):
         return substitutions.get(self.name, self)
 
     def __repr__(self):
-        return "TypeVariable(%s, %s)" % (self.name, self.k)
+        return "TypeVariable(%s, %s)" % (repr(self.name), self.k)
 
 class LambdaType(TypeLevelExpr):
     def __init__(self, args, body):

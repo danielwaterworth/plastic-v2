@@ -46,6 +46,8 @@ class LLVMWriter:
             self.write(ty.module_name)
             self.write("$$")
             self.write(ty.name)
+            self.write(".")
+            self.write(str(ty.version))
         elif ty.tag == 'void':
             self.write('void')
         elif ty.tag == 'func':
@@ -54,9 +56,9 @@ class LLVMWriter:
             self.writeout_type_list(ty.arg_types)
             self.write(')')
         elif ty.tag == 'tuple':
-            self.write('{ ')
+            self.write('<{ ')
             self.writeout_type_list(ty.types)
-            self.write(' }')
+            self.write(' }>')
         else:
             print(ty)
             raise NotImplementedError()
@@ -79,9 +81,11 @@ class LLVMWriter:
         self.write(decl.module_name)
         self.write("$$")
         self.write(decl.name)
-        self.write(" = type { ")
+        self.write(".")
+        self.write(str(decl.version))
+        self.write(" = type <{ ")
         self.writeout_type_list(decl.fields)
-        self.write(" }\n")
+        self.write(" }>\n")
 
     def writeout_string(self, decl):
         self.write(decl.name)
