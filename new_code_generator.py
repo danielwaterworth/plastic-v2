@@ -826,7 +826,7 @@ class CodeGenerator:
             return array_of(of, n.n)
         elif type_checker.is_tuple(ty):
             return tuple_of(self.generate_type_list(ty.args))
-        elif type(ty) == type_checker.StructType:
+        elif ty.tag == 'struct_type':
             if len(ty.type_args) > 0:
                 type_args = self.generate_type_list(ty.type_args)
                 version = \
@@ -834,7 +834,7 @@ class CodeGenerator:
                 return named_type(ty.module_name, ty.name, version)
             else:
                 return named_type(ty.module_name, ty.name)
-        elif type(ty) == type_checker.EnumType:
+        elif ty.tag == 'enum_type':
             if len(ty.type_args) > 0:
                 type_args = self.generate_type_list(ty.type_args)
                 version = \

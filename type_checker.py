@@ -72,53 +72,26 @@ def type_apply(fn, args):
 def ptr_to(ty):
     return type_apply(ptr, [ty])
 
-class StructType:
-    kind = star
+def struct_type(module_name, name, type_args):
+    return \
+        Node(
+            'struct_type',
+            module_name = module_name,
+            name = name,
+            type_args = type_args,
+            kind = star,
+        )
 
-    def __init__(self, module_name, name, type_args):
-        self.module_name = module_name
-        self.name = name
-        self.type_args = type_args
-
-    def __eq__(self, other):
-        return \
-            type(other) == StructType and \
-            self.module_name == other.module_name and \
-            self.name == other.name and \
-            tuple(self.type_args) == tuple(other.type_args)
-
-    def __str__(self):
-        return \
-            "StructType(%s, %s, %s)" % (
-                self.module_name,
-                self.name,
-                self.type_args,
-            )
-
-class EnumType:
-    kind = star
-
-    def __init__(self, module_name, name, type_args, constructors=None):
-        self.module_name = module_name
-        self.name = name
-        self.type_args = type_args
-        self.constructors = constructors
-
-    def __eq__(self, other):
-        return \
-            type(other) == EnumType and \
-            self.module_name == other.module_name and \
-            self.name == other.name and \
-            tuple(self.type_args) == tuple(other.type_args)
-
-    def __str__(self):
-        return \
-            "EnumType(%s, %s, %s, %s)" % (
-                self.module_name,
-                self.name,
-                self.type_args,
-                self.constructors,
-            )
+def enum_type(module_name, name, type_args, constructors=None):
+    return \
+        Node(
+            'enum_type',
+            module_name = module_name,
+            name = name,
+            type_args = type_args,
+            constructors=constructors,
+            kind = star,
+        )
 
 coroutine = Node('coroutine', kind = function_kind([star] * 3, star))
 
@@ -152,25 +125,26 @@ def lambda_type(args, body):
         )
 
 def substitute(x, substitutions):
-    if type(x) == StructType:
-        StructType(
-            x.module_name,
-            x.name,
-            [substitute(type_arg, substitutions)
-                for type_arg in x.type_args],
-        )
-    if type(x) == EnumType:
+    if x.tag == 'enum_type':
         new_constructors = {}
         for name, tys in x.constructors.items():
             new_constructors[name] = \
                 [substitute(ty, substitutions) for ty in tys]
         return \
-            EnumType(
+            enum_type(
                 x.module_name,
                 x.name,
                 [substitute(type_arg, substitutions)
                     for type_arg in x.type_args],
                 new_constructors,
+            )
+    if x.tag == 'struct_type':
+        return \
+            struct_type(
+                x.module_name,
+                x.name,
+                [substitute(type_arg, substitutions)
+                    for type_arg in x.type_args],
             )
     if x.tag == 'function_type':
         return \
@@ -229,13 +203,15 @@ def is_tuple(x):
 def is_number(x):
     return x.tag == 'number_type' or x == opaque_number_type
 
-class ModuleType:
-    kind = module_kind
-
-    def __init__(self, name, interface):
-        self.name = name
-        self.values = interface.values
-        self.types = interface.types
+def module_type(name, interface):
+    return \
+        Node(
+            'module_type',
+            name = name,
+            values = interface.values,
+            types = interface.types,
+            kind = module_kind,
+        )
 
 class ModuleInterface:
     def __init__(self, values, types):
@@ -349,25 +325,25 @@ class Environment:
                 self,
             )
 
-        struct_type = StructType(self.module_name, decl.name, type_args)
+        struct_ty = struct_type(self.module_name, decl.name, type_args)
         if len(type_param_kinds) > 0:
             self.type_bindings[decl.name] = \
                 lambda_type(
                     type_param_kinds,
-                    struct_type,
+                    struct_ty,
                 )
         else:
-            self.type_bindings[decl.name] = struct_type
+            self.type_bindings[decl.name] = struct_ty
 
         fields = \
             [(name, new_env.check_type(ty)) for name, ty in decl.fields]
-        struct_type.fields = dict(fields)
+        struct_ty.fields = dict(fields)
 
         constructor_type = \
             function_type(
                 'plastic',
                 [ty for _, ty in fields],
-                struct_type,
+                struct_ty,
             )
 
         if len(type_param_kinds) > 0:
@@ -401,15 +377,15 @@ class Environment:
                 self,
             )
 
-        enum_type = EnumType(self.module_name, decl.name, type_args)
+        enum_ty = enum_type(self.module_name, decl.name, type_args)
         if len(type_param_kinds) > 0:
             self.type_bindings[decl.name] = \
                 lambda_type(
                     type_param_kinds,
-                    enum_type,
+                    enum_ty,
                 )
         else:
-            self.type_bindings[decl.name] = enum_type
+            self.type_bindings[decl.name] = enum_ty
 
         constructors = \
             [(name, new_env.check_type_list(ty))
@@ -417,7 +393,7 @@ class Environment:
 
         for name, args in constructors:
             constructor_type = \
-                function_type('plastic', args, enum_type)
+                function_type('plastic', args, enum_ty)
             if len(type_param_kinds) > 0:
                 self.term_bindings[name] = \
                     lambda_type(
@@ -427,7 +403,7 @@ class Environment:
             else:
                 self.term_bindings[name] = \
                     constructor_type
-        enum_type.constructors = dict(constructors)
+        enum_ty.constructors = dict(constructors)
         return \
             Node(
                 'enum',
@@ -509,23 +485,7 @@ class Environment:
                 )
         elif expr.tag == 'field_access':
             x = self.check_expression(expr.x)
-            if type(x.ty) == ModuleType:
-                if not expr.field in x.ty.values:
-                    raise \
-                        TypeError(
-                            "No such value %s in module %s" % (
-                                repr(expr.field),
-                                repr(x.ty.name)
-                            ),
-                        )
-                return \
-                    Node(
-                        'module_field_access',
-                        x = x,
-                        field = expr.field,
-                        ty = x.ty.values[expr.field],
-                    )
-            elif type(x.ty) == StructType:
+            if x.ty.tag == 'struct_type':
                 if not expr.field in x.ty.fields:
                     raise \
                         TypeError(
@@ -541,6 +501,22 @@ class Environment:
                         x = x,
                         field = expr.field,
                         ty = x.ty.fields[expr.field],
+                    )
+            elif x.ty.tag == 'module_type':
+                if not expr.field in x.ty.values:
+                    raise \
+                        TypeError(
+                            "No such value %s in module %s" % (
+                                repr(expr.field),
+                                repr(x.ty.name)
+                            ),
+                        )
+                return \
+                    Node(
+                        'module_field_access',
+                        x = x,
+                        field = expr.field,
+                        ty = x.ty.values[expr.field],
                     )
             else:
                 print(x.ty)
@@ -901,7 +877,7 @@ class Environment:
             return [statement] + new_env.check_body(rest)
 
     def check_constructor_pattern(self, enum_type, pattern):
-        if type(enum_type) != EnumType:
+        if enum_type.tag != 'enum_type':
             print(enum_type)
             raise TypeError()
         constructor = enum_type.constructors[pattern.name]
@@ -960,7 +936,7 @@ class Environment:
                 )
         elif l_expr.tag == 'field_access':
             root = self.check_l_expression(l_expr.l_expr)
-            if type(root.ty) != StructType:
+            if root.ty.tag != 'struct_type':
                 raise TypeError()
             if l_expr.field not in root.ty.fields:
                 raise TypeError()
@@ -1082,9 +1058,9 @@ class Environment:
             )
 
     def check_import(self, decl):
-        module_type = ModuleType(decl.module, self.modules[decl.module])
-        self.type_bindings[decl.module] = module_type
-        self.term_bindings[decl.module] = module_type
+        module_ty = module_type(decl.module, self.modules[decl.module])
+        self.type_bindings[decl.module] = module_ty
+        self.term_bindings[decl.module] = module_ty
         return \
             Node(
                 'import',
