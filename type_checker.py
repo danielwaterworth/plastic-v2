@@ -23,6 +23,12 @@ class TypeLevelExpr:
     def substitute(self, substitutions):
         return self
 
+def substitutable_for(a, b):
+    return a.substitutable_for(b)
+
+def substitute(x, substitutions):
+    return x.substitute(substitutions)
+
 class Void(TypeLevelExpr):
     kind = star
 
@@ -135,8 +141,8 @@ class TypeApplication(TypeLevelExpr):
     def substitute(self, substitutions):
         return \
             type_apply(
-                self.function.substitute(substitutions),
-                [arg.substitute(substitutions) for arg in self.args],
+                substitute(self.function, substitutions),
+                [substitute(arg, substitutions) for arg in self.args],
             )
 
     def __eq__(self, other):
@@ -161,7 +167,7 @@ def type_apply(fn, args):
     if type(fn) == LambdaType:
         names = [name for name, _ in fn.args]
         substitutions = dict(zip(names, args))
-        return fn.body.substitute(substitutions)
+        return substitute(fn.body, substitutions)
     else:
         return TypeApplication(fn, args)
 
@@ -181,7 +187,7 @@ class StructType(TypeLevelExpr):
             StructType(
                 self.module_name,
                 self.name,
-                [type_arg.substitute(substitutions)
+                [substitute(type_arg, substitutions)
                     for type_arg in self.type_args],
             )
 
@@ -213,12 +219,12 @@ class EnumType(TypeLevelExpr):
         new_constructors = {}
         for name, tys in self.constructors.items():
             new_constructors[name] = \
-                [ty.substitute(substitutions) for ty in tys]
+                [substitute(ty, substitutions) for ty in tys]
         return \
             EnumType(
                 self.module_name,
                 self.name,
-                [type_arg.substitute(substitutions)
+                [substitute(type_arg, substitutions)
                     for type_arg in self.type_args],
                 new_constructors,
             )
@@ -255,8 +261,8 @@ class FunctionType(TypeLevelExpr):
         return \
             FunctionType(
                 self.calling_convention,
-                [arg.substitute(substitutions) for arg in self.arg_types],
-                self.return_type.substitute(substitutions),
+                [substitute(arg, substitutions) for arg in self.arg_types],
+                substitute(self.return_type, substitutions),
             )
 
     @property
@@ -300,7 +306,7 @@ class LambdaType(TypeLevelExpr):
         substitutions = dict(substitutions)
         for arg in self.args:
             del substitutions[arg]
-        return self.body.substitute(substitutions)
+        return substitute(self.body, substitutions)
 
     def __repr__(self):
         return "LambdaType(%s, %s)" % (self.args, self.body)
@@ -311,7 +317,7 @@ char_ptr = ptr_to(char)
 def list_substitutable_for(args, expected):
     return \
         len(args) == len(expected) and \
-        all([arg.substitutable_for(exp) for arg, exp in zip(args, expected)])
+        all([substitutable_for(arg, exp) for arg, exp in zip(args, expected)])
 
 def is_ptr(x):
     if type(x) == OpaquePtr:
@@ -582,7 +588,7 @@ class Environment:
             new_args = []
             iterator = zip(arg_types, function.ty.arg_types, args)
             for actual, expected, value in iterator:
-                if not actual.substitutable_for(expected):
+                if not substitutable_for(actual, expected):
                     raise \
                         TypeError(
                             "can't pass %s for %s" % (
@@ -783,14 +789,14 @@ class Environment:
             b = self.check_expression(expr.b)
             if a.ty == b.ty:
                 pass
-            if a.ty.substitutable_for(b.ty):
+            if substitutable_for(a.ty, b.ty):
                 a = \
                     Node(
                         'cast',
                         expr = a,
                         ty = b.ty,
                     )
-            elif b.ty.substitutable_for(a.ty):
+            elif substitutable_for(b.ty, a.ty):
                 b = \
                     Node(
                         'cast',
@@ -812,14 +818,14 @@ class Environment:
             b = self.check_expression(expr.b)
             if a.ty == b.ty:
                 pass
-            if a.ty.substitutable_for(b.ty):
+            if substitutable_for(a.ty, b.ty):
                 a = \
                     Node(
                         'cast',
                         expr = a,
                         ty = b.ty,
                     )
-            elif b.ty.substitutable_for(a.ty):
+            elif substitutable_for(b.ty, a.ty):
                 b = \
                     Node(
                         'cast',
@@ -844,14 +850,14 @@ class Environment:
             b = self.check_expression(expr.b)
             if a.ty == b.ty:
                 pass
-            if a.ty.substitutable_for(b.ty):
+            if substitutable_for(a.ty, b.ty):
                 a = \
                     Node(
                         'cast',
                         expr = a,
                         ty = b.ty,
                     )
-            elif b.ty.substitutable_for(a.ty):
+            elif substitutable_for(b.ty, a.ty):
                 b = \
                     Node(
                         'cast',
@@ -885,7 +891,7 @@ class Environment:
         if statement.ty:
             ty = self.check_type(statement.ty)
             if expr:
-                if not expr.ty.substitutable_for(ty):
+                if not substitutable_for(expr.ty, ty):
                     raise ParseError()
                 if expr.ty != ty:
                     expr = \
@@ -956,7 +962,7 @@ class Environment:
                 l_expr = self.check_l_expression(first_statement.l_expr)
                 expr = self.check_expression(first_statement.expr)
                 compatible = \
-                    expr.ty.substitutable_for(l_expr.ty)
+                    substitutable_for(expr.ty, l_expr.ty)
                 equal = \
                     expr.ty == l_expr.ty
                 if not compatible:
@@ -977,7 +983,7 @@ class Environment:
                 new_env = self
             elif first_statement.tag == 'return':
                 expr = self.check_expression(first_statement.expr)
-                if not expr.ty.substitutable_for(self.return_type):
+                if not substitutable_for(expr.ty, self.return_type):
                     raise \
                         TypeError(
                             'can\'t return %s for %s' % (
