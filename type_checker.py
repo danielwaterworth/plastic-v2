@@ -12,24 +12,18 @@ def function_kind(arg_kinds, return_kind):
             return_kind = return_kind,
         )
 
-class TypeLevelExpr:
-    @property
-    def kind(self):
-        raise NotImplementedError()
-
-    def substitutable_for(self, other):
-        return self == other
-
-    def substitute(self, substitutions):
-        return self
-
 def substitutable_for(a, b):
-    return a.substitutable_for(b)
+    if a == b:
+        return True
 
-def substitute(x, substitutions):
-    return x.substitute(substitutions)
+    if type(a) == OpaquePtr:
+        return is_ptr(b)
+    if type(a) == OpaqueNumberType:
+        return type(b) == NumberType
 
-class Void(TypeLevelExpr):
+    return False
+
+class Void:
     kind = star
 
     def __eq__(self, other):
@@ -37,7 +31,7 @@ class Void(TypeLevelExpr):
 
 void = Void()
 
-class Ptr(TypeLevelExpr):
+class Ptr:
     kind = function_kind([star], star)
 
     def __eq__(self, other):
@@ -48,7 +42,7 @@ class Ptr(TypeLevelExpr):
 
 ptr = Ptr()
 
-class Array(TypeLevelExpr):
+class Array:
     kind = function_kind([star, nat], star)
 
     def __eq__(self, other):
@@ -59,7 +53,7 @@ class Array(TypeLevelExpr):
 
 array = Array()
 
-class Tuple(TypeLevelExpr):
+class Tuple:
     def __init__(self, n):
         self.n = n
 
@@ -76,7 +70,7 @@ class Tuple(TypeLevelExpr):
         else:
             return '(' + ','*(self.n-1) + ')'
 
-class NatLiteral(TypeLevelExpr):
+class NatLiteral:
     kind = nat
 
     def __init__(self, n):
@@ -85,13 +79,10 @@ class NatLiteral(TypeLevelExpr):
     def __eq__(self, other):
         return type(other) == NatLiteral and self.n == other.n
 
-class OpaquePtr(TypeLevelExpr):
+class OpaquePtr:
     kind = star
 
-    def substitutable_for(self, other):
-        return is_ptr(other)
-
-class Boolean(TypeLevelExpr):
+class Boolean:
     kind = star
 
     def __eq__(self, other):
@@ -102,7 +93,7 @@ class Boolean(TypeLevelExpr):
 
 boolean = Boolean()
 
-class NumberType(TypeLevelExpr):
+class NumberType:
     kind = star
 
     def __init__(self, signed, width):
@@ -118,18 +109,13 @@ class NumberType(TypeLevelExpr):
     def __repr__(self):
         return "NumberType(%s, %d)" % (str(self.signed), self.width)
 
-class OpaqueNumberType(TypeLevelExpr):
+class OpaqueNumberType:
     kind = star
-
-    def substitutable_for(self, other):
-        return \
-            type(other) == NumberType or \
-            type(other) == OpaqueNumberType
 
     def __eq__(self, other):
         return type(other) == OpaqueNumberType
 
-class TypeApplication(TypeLevelExpr):
+class TypeApplication:
     def __init__(self, function, args):
         self.function = function
         self.args = args
@@ -137,13 +123,6 @@ class TypeApplication(TypeLevelExpr):
     @property
     def kind(self):
         return self.function.kind.return_kind
-
-    def substitute(self, substitutions):
-        return \
-            type_apply(
-                substitute(self.function, substitutions),
-                [substitute(arg, substitutions) for arg in self.args],
-            )
 
     def __eq__(self, other):
         return \
@@ -174,22 +153,13 @@ def type_apply(fn, args):
 def ptr_to(ty):
     return type_apply(ptr, [ty])
 
-class StructType(TypeLevelExpr):
+class StructType:
     kind = star
 
     def __init__(self, module_name, name, type_args):
         self.module_name = module_name
         self.name = name
         self.type_args = type_args
-
-    def substitute(self, substitutions):
-        return \
-            StructType(
-                self.module_name,
-                self.name,
-                [substitute(type_arg, substitutions)
-                    for type_arg in self.type_args],
-            )
 
     def __eq__(self, other):
         return \
@@ -206,7 +176,7 @@ class StructType(TypeLevelExpr):
                 self.type_args,
             )
 
-class EnumType(TypeLevelExpr):
+class EnumType:
     kind = star
 
     def __init__(self, module_name, name, type_args, constructors=None):
@@ -214,20 +184,6 @@ class EnumType(TypeLevelExpr):
         self.name = name
         self.type_args = type_args
         self.constructors = constructors
-
-    def substitute(self, substitutions):
-        new_constructors = {}
-        for name, tys in self.constructors.items():
-            new_constructors[name] = \
-                [substitute(ty, substitutions) for ty in tys]
-        return \
-            EnumType(
-                self.module_name,
-                self.name,
-                [substitute(type_arg, substitutions)
-                    for type_arg in self.type_args],
-                new_constructors,
-            )
 
     def __eq__(self, other):
         return \
@@ -245,25 +201,17 @@ class EnumType(TypeLevelExpr):
                 self.constructors,
             )
 
-class Coroutine(TypeLevelExpr):
+class Coroutine:
     kind = function_kind([star] * 3, star)
 
     def __eq__(self, other):
         return type(other) == Coroutine
 
-class FunctionType(TypeLevelExpr):
+class FunctionType:
     def __init__(self, calling_convention, arg_types, return_type):
         self.calling_convention = calling_convention
         self.arg_types = arg_types
         self.return_type = return_type
-
-    def substitute(self, substitutions):
-        return \
-            FunctionType(
-                self.calling_convention,
-                [substitute(arg, substitutions) for arg in self.arg_types],
-                substitute(self.return_type, substitutions),
-            )
 
     @property
     def kind(self):
@@ -277,7 +225,7 @@ class FunctionType(TypeLevelExpr):
                 self.return_type
             )
 
-class TypeVariable(TypeLevelExpr):
+class TypeVariable:
     def __init__(self, name, kind):
         self.name = name
         self.k = kind
@@ -286,13 +234,10 @@ class TypeVariable(TypeLevelExpr):
     def kind(self):
         return self.k
 
-    def substitute(self, substitutions):
-        return substitutions.get(self.name, self)
-
     def __repr__(self):
         return "TypeVariable(%s, %s)" % (repr(self.name), self.k)
 
-class LambdaType(TypeLevelExpr):
+class LambdaType:
     def __init__(self, args, body):
         self.args = args
         self.body = body
@@ -302,14 +247,55 @@ class LambdaType(TypeLevelExpr):
         arg_kinds = [kind for _, kind in self.args]
         return function_kind(arg_kinds, self.body.kind)
 
-    def substitute(self, substitutions):
-        substitutions = dict(substitutions)
-        for arg in self.args:
-            del substitutions[arg]
-        return substitute(self.body, substitutions)
-
     def __repr__(self):
         return "LambdaType(%s, %s)" % (self.args, self.body)
+
+def substitute(x, substitutions):
+    if type(x) == TypeApplication:
+        return \
+            type_apply(
+                substitute(x.function, substitutions),
+                [substitute(arg, substitutions) for arg in x.args],
+            )
+    if type(x) == StructType:
+        StructType(
+            x.module_name,
+            x.name,
+            [substitute(type_arg, substitutions)
+                for type_arg in x.type_args],
+        )
+    if type(x) == EnumType:
+        new_constructors = {}
+        for name, tys in x.constructors.items():
+            new_constructors[name] = \
+                [substitute(ty, substitutions) for ty in tys]
+        return \
+            EnumType(
+                x.module_name,
+                x.name,
+                [substitute(type_arg, substitutions)
+                    for type_arg in x.type_args],
+                new_constructors,
+            )
+    if type(x) == FunctionType:
+        return \
+            FunctionType(
+                x.calling_convention,
+                [substitute(arg, substitutions) for arg in x.arg_types],
+                substitute(x.return_type, substitutions),
+            )
+    if type(x) == TypeVariable:
+        return substitutions.get(x.name, x)
+    if type(x) == LambdaType:
+        substitutions = dict(substitutions)
+        for arg in x.args:
+            del substitutions[arg[0]]
+        return \
+            LambdaType(
+                x.args,
+                substitute(x.body, substitutions)
+            )
+    return x
 
 char = NumberType(True, 8)
 char_ptr = ptr_to(char)
@@ -342,7 +328,7 @@ def is_tuple(x):
 def is_number(x):
     return type(x) in [NumberType, OpaqueNumberType]
 
-class ModuleType(TypeLevelExpr):
+class ModuleType:
     kind = module_kind
 
     def __init__(self, name, interface):
