@@ -84,6 +84,9 @@ class Representation:
         elif isinstance(ty, OrNone):
             if data != None:
                 self.check(ty.ty, data, path)
+        elif isinstance(ty, OneOf):
+            if data not in ty.alternatives:
+                raise Exception()
         else:
             print(ty)
             raise Exception('problem')

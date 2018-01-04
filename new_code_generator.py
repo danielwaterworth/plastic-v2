@@ -441,16 +441,16 @@ class FunctionWriter:
     def generate_comparison(self, expr):
         a_ty, a = self.generate_expression(expr.a)
         b_ty, b = self.generate_expression(expr.b)
-        if expr.tag in ['==', '!=']:
+        if expr.tag == 'equality_operator':
             ops = {
                 '==': 'eq',
                 '!=': 'ne',
             }
             if a_ty.tag == 'number' or a_ty.tag == 'ptr_to':
-                return boolean, self.icmp(ops[expr.tag], a_ty, a, b)
+                return boolean, self.icmp(ops[expr.operator], a_ty, a, b)
             else:
                 raise NotImplementedError()
-        elif expr.tag in ['<', '>', '<=', '>=']:
+        elif expr.tag == 'comparison_operator':
             assert type(expr.a.ty) == type_checker.NumberType
             if expr.a.ty.signed:
                 ops = {
@@ -466,7 +466,9 @@ class FunctionWriter:
                     '<=': 'ule',
                     '>=': 'uge',
                 }
-            return boolean, self.icmp(ops[expr.tag], a_ty, a, b)
+            return boolean, self.icmp(ops[expr.operator], a_ty, a, b)
+        else:
+            raise NotImplementedError()
 
     def generate_operator(self, expr):
         ops = {
@@ -477,7 +479,7 @@ class FunctionWriter:
         }
         ty, a = self.generate_expression(expr.a)
         _, b = self.generate_expression(expr.b)
-        return ty, self.binop(ops[expr.tag], a, b, ty)
+        return ty, self.binop(ops[expr.operator], a, b, ty)
 
     def generate_number_literal(self, expr):
         ty = self.generate_type(expr.ty)
@@ -525,9 +527,9 @@ class FunctionWriter:
             output = self.generate_character_literal(expr)
         elif expr.tag == 'cast':
             output = self.generate_cast(expr)
-        elif expr.tag in ['==', '!=', '<', '>', '<=', '>=']:
+        elif expr.tag in ['comparison_operator', 'equality_operator']:
             output = self.generate_comparison(expr)
-        elif expr.tag in ['+', '-', '|', '*', '/', '&']:
+        elif expr.tag == 'binary_operator':
             output = self.generate_operator(expr)
         elif expr.tag == 'number_literal':
             output = self.generate_number_literal(expr)
@@ -693,7 +695,7 @@ class FunctionWriter:
             constructor_ptr = \
                 self.getelementptr(ty, ptr_to(ty), ptr, ["0", "1"])
             constructor_ty = named_type(pattern.ty.module_name, pattern.name)
-            key = pattern.ty.module_name, pattern.ty.name
+            key = pattern.ty.module_name, pattern.ty.name, ()
             size = \
                 self.code_generator.calculate_enum_size(
                     self.code_generator.enums[key]
@@ -729,7 +731,7 @@ class FunctionWriter:
             constructor_ptr = \
                 self.getelementptr(ty, ptr_to(ty), ptr, ["0", "1"])
             constructor_ty = named_type(pattern.ty.module_name, pattern.name)
-            key = pattern.ty.module_name, pattern.ty.name
+            key = pattern.ty.module_name, pattern.ty.name, ()
             size = \
                 self.code_generator.calculate_enum_size(
                     self.code_generator.enums[key],
@@ -976,7 +978,7 @@ class CodeGenerator:
     def generate_struct(self, decl):
         self.typed_struct_decls[(self.module_name, decl.name)] = decl
         if len(decl.type_params) == 0:
-            self.generate_struct_struct(self.module_name, decl.name, ())
+            self.generate_struct_struct(self.module_name, decl.name, (), 0)
             self.generate_struct_constructor(self.module_name, decl.name, ())
             fields = \
                 [(name, self.generate_type(ty)) for name, ty in decl.fields]
@@ -1096,7 +1098,9 @@ class CodeGenerator:
 
         self.type_scope = scope
 
-        raise NotImplementedError()
+        if len(type_args) != 0:
+            raise NotImplementedError()
+
         for tag, (name, types) in enumerate(constructors):
             self.generate_constructor_function(
                 decl.name,
@@ -1150,8 +1154,8 @@ class CodeGenerator:
             self.constructor_tags[decl.name][name] = constructor_tag
 
         if len(decl.type_params) == 0:
+            self.generate_enum_structs(self.module_name, decl.name, (), 0)
             self.generate_enum_constructors(self.module_name, decl.name, ())
-            self.generate_enum_structs(self.module_name, decl.name, ())
 
     def generate_function_specialization(self, decl, type_args, version):
         function_writer = FunctionWriter(self)

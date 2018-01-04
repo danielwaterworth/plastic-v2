@@ -1,15 +1,18 @@
 from ir import *
 
-comparisons = [
-    '<',
-    '>',
-    '>=',
-    '<=',
+equality_operators = [
     '==',
     '!=',
 ]
 
-operators = [
+comparison_operators = [
+    '<',
+    '>',
+    '>=',
+    '<=',
+]
+
+binary_operators = [
     '+',
     '-',
     '*',
@@ -100,13 +103,18 @@ AST = \
                     'expr': 'Expr',
                     'type': 'Type',
                 },
-                'compare': {
-                    'operator': OneOf(*comparisons),
+                'equality_operator': {
+                    'operator': OneOf(*equality_operators),
                     'a': 'Expr',
                     'b': 'Expr',
                 },
-                'binop': {
-                    'operator': OneOf(*operators),
+                'comparison_operator': {
+                    'operator': OneOf(*comparison_operators),
+                    'a': 'Expr',
+                    'b': 'Expr',
+                },
+                'binary_operator': {
+                    'operator': OneOf(*binary_operators),
                     'a': 'Expr',
                     'b': 'Expr',
                 },
@@ -484,15 +492,18 @@ class Parser:
             if self.next.tag == 'asterisk':
                 self.advance()
                 other = self.parse_expression_4()
-                expr = Node('binop', operator = '*', a = expr, b = other)
+                expr = \
+                    Node('binary_operator', operator = '*', a = expr, b = other)
             elif self.next.tag == 'symbol' and self.next.symbol == '/':
                 self.advance()
                 other = self.parse_expression_4()
-                expr = Node('binop', operator = '/', a = expr, b = other)
+                expr = \
+                    Node('binary_operator', operator = '/', a = expr, b = other)
             elif self.next.tag == 'ampersand':
                 self.advance()
                 other = self.parse_expression_4()
-                expr = Node('binop', operator = '&', a = expr, b = other)
+                expr = \
+                    Node('binary_operator', operator = '&', a = expr, b = other)
             else:
                 break
         return expr
@@ -505,7 +516,13 @@ class Parser:
                 if self.next.symbol in ['-', '+', '|']:
                     self.advance()
                     other = self.parse_expression_5()
-                    expr = Node('binop', operator = symbol, a = expr, b = other)
+                    expr = \
+                        Node(
+                            'binary_operator',
+                            operator = symbol,
+                            a = expr,
+                            b = other,
+                        )
                 else:
                     break
             else:
@@ -517,11 +534,26 @@ class Parser:
         while not self.eof():
             if self.next.tag == 'symbol':
                 symbol = self.next.symbol
-                if symbol in ['==', '!=', '<', '<=', '>', '>=']:
+                if symbol in ['==', '!=']:
                     self.advance()
                     other = self.parse_expression_6()
                     expr = \
-                        Node('compare', operator = symbol, a = expr, b = other)
+                        Node(
+                            'equality_operator',
+                            operator = symbol,
+                            a = expr,
+                            b = other,
+                        )
+                elif symbol in ['<', '<=', '>', '>=']:
+                    self.advance()
+                    other = self.parse_expression_6()
+                    expr = \
+                        Node(
+                            'comparison_operator',
+                            operator = symbol,
+                            a = expr,
+                            b = other,
+                        )
                 else:
                     break
             else:

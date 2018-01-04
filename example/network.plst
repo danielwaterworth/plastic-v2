@@ -32,6 +32,7 @@ struct
       ai_socktype: i32,
       ai_protocol: i32,
       ai_addrlen: u32,
+      pad1: u32,
       ai_addr: ptr(sockaddr),
       ai_canonname: ptr(i8),
       ai_next: ptr(addrinfo),
