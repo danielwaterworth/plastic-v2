@@ -1,34 +1,16 @@
-class Kind:
-    pass
+from ir import *
 
-class StarKind(Kind):
-    def __eq__(self, other):
-        return type(other) == StarKind
+star = Node('star')
+nat = Node('nat')
+module_kind = Node('module')
 
-    def __repr__(self):
-        return 'star'
-
-star = StarKind()
-
-class NatKind(Kind):
-    def __eq__(self, other):
-        return type(other) == NatKind
-
-    def __repr__(self):
-        return 'nat'
-
-nat = NatKind()
-
-class FunctionKind(Kind):
-    def __init__(self, arg_kinds, return_kind):
-        self.arg_kinds = arg_kinds
-        self.return_kind = return_kind
-
-    def __eq__(self, other):
-        return \
-            type(other) == FunctionKind and \
-            tuple(self.arg_kinds) == tuple(other.arg_kinds) and \
-            self.return_kind == other.return_kind
+def function_kind(arg_kinds, return_kind):
+    return \
+        Node(
+            'function',
+            arg_kinds = arg_kinds,
+            return_kind = return_kind,
+        )
 
 class TypeLevelExpr:
     @property
@@ -50,7 +32,7 @@ class Void(TypeLevelExpr):
 void = Void()
 
 class Ptr(TypeLevelExpr):
-    kind = FunctionKind([star], star)
+    kind = function_kind([star], star)
 
     def __eq__(self, other):
         return type(other) == Ptr
@@ -61,7 +43,7 @@ class Ptr(TypeLevelExpr):
 ptr = Ptr()
 
 class Array(TypeLevelExpr):
-    kind = FunctionKind([star, nat], star)
+    kind = function_kind([star, nat], star)
 
     def __eq__(self, other):
         return type(other) == Array
@@ -77,7 +59,7 @@ class Tuple(TypeLevelExpr):
 
     @property
     def kind(self):
-        return FunctionKind([star] * self.n, star)
+        return function_kind([star] * self.n, star)
 
     def __eq__(self, other):
         return type(other) == Tuple and self.n == other.n
@@ -167,14 +149,14 @@ class TypeApplication(TypeLevelExpr):
         return "type_apply(%s, %s)" % (self.function, self.args)
 
 def type_apply(fn, args):
-    if type(fn.kind) != FunctionKind:
+    if fn.kind.tag != 'function':
         raise \
             TypeError(
                 "type function applied to wrong number of arguments"
             )
     fn_arg_kinds = fn.kind.arg_kinds
     arg_kinds = [arg.kind for arg in args]
-    if tuple(fn_arg_kinds) != tuple(arg_kinds):
+    if fn_arg_kinds != arg_kinds:
         raise TypeError()
     if type(fn) == LambdaType:
         names = [name for name, _ in fn.args]
@@ -258,7 +240,7 @@ class EnumType(TypeLevelExpr):
             )
 
 class Coroutine(TypeLevelExpr):
-    kind = FunctionKind([star] * 3, star)
+    kind = function_kind([star] * 3, star)
 
     def __eq__(self, other):
         return type(other) == Coroutine
@@ -312,7 +294,7 @@ class LambdaType(TypeLevelExpr):
     @property
     def kind(self):
         arg_kinds = [kind for _, kind in self.args]
-        return FunctionKind(arg_kinds, self.body.kind)
+        return function_kind(arg_kinds, self.body.kind)
 
     def substitute(self, substitutions):
         substitutions = dict(substitutions)
@@ -353,22 +335,6 @@ def is_tuple(x):
 
 def is_number(x):
     return type(x) in [NumberType, OpaqueNumberType]
-
-class TypedASTNode:
-    def __init__(self, tag, **kwargs):
-        self.tag = tag
-        self.attributes = kwargs
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-
-    def __repr__(self):
-        return "TypedASTNode(%s, %s)" % (repr(self.tag), repr(self.attributes))
-
-class ModuleKind(Kind):
-    def __eq__(self, other):
-        return type(other) == ModuleKind
-
-module_kind = ModuleKind()
 
 class ModuleType(TypeLevelExpr):
     kind = module_kind
@@ -522,7 +488,7 @@ class Environment:
                 constructor_type
 
         return \
-            TypedASTNode(
+            Node(
                 'struct',
                 name = decl.name,
                 fields = fields,
@@ -570,7 +536,7 @@ class Environment:
                     constructor_type
         enum_type.constructors = dict(constructors)
         return \
-            TypedASTNode(
+            Node(
                 'enum',
                 name = decl.name,
                 constructors = constructors,
@@ -583,7 +549,7 @@ class Environment:
         self.term_bindings[decl.name] = \
             FunctionType('c', arg_types, return_type)
         return \
-            TypedASTNode(
+            Node(
                 'extern',
                 name = decl.name,
                 arg_types = arg_types,
@@ -596,7 +562,7 @@ class Environment:
             if yielded_expr.ty != self.product_type:
                 raise TypeError()
             typed_expr = \
-                TypedASTNode(
+                Node(
                     'yield_expression',
                     expr = yielded_expr,
                     ty = self.consume_type,
@@ -628,14 +594,14 @@ class Environment:
                     new_args.append(value)
                 else:
                     new_args.append(
-                        TypedASTNode(
+                        Node(
                             'cast',
                             expr = value,
                             ty = expected,
                         )
                     )
             return \
-                TypedASTNode(
+                Node(
                     'application',
                     function = function,
                     args = new_args,
@@ -643,7 +609,7 @@ class Environment:
                 )
         elif expr.tag == 'variable':
             return \
-                TypedASTNode(
+                Node(
                     'variable',
                     name = expr.name,
                     ty = self.lookup_term(expr.name),
@@ -660,7 +626,7 @@ class Environment:
                             ),
                         )
                 return \
-                    TypedASTNode(
+                    Node(
                         'module_field_access',
                         x = x,
                         field = expr.field,
@@ -677,7 +643,7 @@ class Environment:
                             ),
                         )
                 return \
-                    TypedASTNode(
+                    Node(
                         'struct_field_access',
                         x = x,
                         field = expr.field,
@@ -703,28 +669,28 @@ class Environment:
             else:
                 raise TypeError()
             return \
-                TypedASTNode(
+                Node(
                     'cast',
                     expr = to_cast,
                     ty = to_ty,
                 )
         elif expr.tag == 'character_literal':
             return \
-                TypedASTNode(
+                Node(
                     'number_literal',
                     n = ord(expr.character),
                     ty = NumberType(False, 8),
                 )
         elif expr.tag == 'number_literal':
             return \
-                TypedASTNode(
+                Node(
                     'number_literal',
                     n = expr.n,
                     ty = OpaqueNumberType(),
                 )
         elif expr.tag == 'string_literal':
             return \
-                TypedASTNode(
+                Node(
                     'string_literal',
                     string = expr.string,
                     ty = char_ptr,
@@ -740,7 +706,7 @@ class Environment:
             new_type = type_apply(function.ty, args)
 
             return \
-                TypedASTNode(
+                Node(
                     'apply_type_args',
                     function = function,
                     args = args,
@@ -749,7 +715,7 @@ class Environment:
         elif expr.tag == 'address_of':
             expr = self.check_l_expression(expr.expr)
             return \
-                TypedASTNode(
+                Node(
                     'address_of',
                     expr = expr,
                     ty = ptr_to(expr.ty),
@@ -759,7 +725,7 @@ class Environment:
             if not is_ptr(expr.ty):
                 raise TypeError()
             return \
-                TypedASTNode(
+                Node(
                     'deref',
                     expr = expr,
                     ty = expr.ty.args[0],
@@ -769,7 +735,7 @@ class Environment:
             if type(expr.ty) != Boolean:
                 raise TypeError()
             return \
-                TypedASTNode(
+                Node(
                     'not',
                     expr = expr,
                     ty = boolean,
@@ -779,7 +745,7 @@ class Environment:
             if not is_number(expr.ty):
                 raise TypeError()
             return \
-                TypedASTNode(
+                Node(
                     'uminus',
                     expr = expr,
                     ty = expr.ty,
@@ -792,7 +758,7 @@ class Environment:
             if not is_number(index.ty):
                 raise TypeError()
             return \
-                TypedASTNode(
+                Node(
                     'array_access',
                     expr = root,
                     index = index,
@@ -802,7 +768,7 @@ class Environment:
             values = self.check_expression_list(expr.values)
             types = [value.ty for value in values]
             return \
-                TypedASTNode(
+                Node(
                     'tuple',
                     values = values,
                     ty = \
@@ -819,14 +785,14 @@ class Environment:
                 pass
             if a.ty.substitutable_for(b.ty):
                 a = \
-                    TypedASTNode(
+                    Node(
                         'cast',
                         expr = a,
                         ty = b.ty,
                     )
             elif b.ty.substitutable_for(a.ty):
                 b = \
-                    TypedASTNode(
+                    Node(
                         'cast',
                         expr = b,
                         ty = a.ty,
@@ -834,7 +800,7 @@ class Environment:
             else:
                 raise TypeError()
             return \
-                TypedASTNode(
+                Node(
                     'equality_operator',
                     operator = expr.operator,
                     a = a,
@@ -848,14 +814,14 @@ class Environment:
                 pass
             if a.ty.substitutable_for(b.ty):
                 a = \
-                    TypedASTNode(
+                    Node(
                         'cast',
                         expr = a,
                         ty = b.ty,
                     )
             elif b.ty.substitutable_for(a.ty):
                 b = \
-                    TypedASTNode(
+                    Node(
                         'cast',
                         expr = b,
                         ty = a.ty,
@@ -866,7 +832,7 @@ class Environment:
                 print(a)
                 raise TypeError()
             return \
-                TypedASTNode(
+                Node(
                     'comparison_operator',
                     operator = expr.operator,
                     a = a,
@@ -880,14 +846,14 @@ class Environment:
                 pass
             if a.ty.substitutable_for(b.ty):
                 a = \
-                    TypedASTNode(
+                    Node(
                         'cast',
                         expr = a,
                         ty = b.ty,
                     )
             elif b.ty.substitutable_for(a.ty):
                 b = \
-                    TypedASTNode(
+                    Node(
                         'cast',
                         expr = b,
                         ty = a.ty,
@@ -898,7 +864,7 @@ class Environment:
                 print(a)
                 raise TypeError()
             return \
-                TypedASTNode(
+                Node(
                     'binary_operator',
                     operator = expr.operator,
                     a = a,
@@ -923,7 +889,7 @@ class Environment:
                     raise ParseError()
                 if expr.ty != ty:
                     expr = \
-                        TypedASTNode(
+                        Node(
                             'cast',
                             expr = expr,
                             ty = ty,
@@ -933,7 +899,7 @@ class Environment:
                 raise TypeError()
             ty = expr.ty
         statement = \
-            TypedASTNode(
+            Node(
                 'let_statement',
                 expr = expr,
                 name = statement.name,
@@ -944,7 +910,7 @@ class Environment:
 
     def check_loop(self, statement):
         return \
-            TypedASTNode(
+            Node(
                 'loop_statement',
                 body = self.check_body(statement.body)
             )
@@ -956,7 +922,7 @@ class Environment:
         true_side = self.check_body(statement.true_side)
         false_side = self.check_body(statement.false_side)
         return \
-            TypedASTNode(
+            Node(
                 'if_statement',
                 condition = condition,
                 true_side = true_side,
@@ -978,13 +944,13 @@ class Environment:
                 new_env = self
             elif first_statement.tag == 'expr_statement':
                 statement = \
-                    TypedASTNode(
+                    Node(
                         'expr_statement',
                         expr = self.check_expression(first_statement.expr),
                     )
                 new_env = self
             elif first_statement.tag == 'break':
-                statement = TypedASTNode('break')
+                statement = Node('break')
                 new_env = self
             elif first_statement.tag == 'assignment':
                 l_expr = self.check_l_expression(first_statement.l_expr)
@@ -997,13 +963,13 @@ class Environment:
                     raise TypeError()
                 if not equal:
                     expr = \
-                        TypedASTNode(
+                        Node(
                             'cast',
                             expr = expr,
                             ty = l_expr.ty,
                         )
                 statement = \
-                    TypedASTNode(
+                    Node(
                         'assignment',
                         l_expr = l_expr,
                         expr = expr,
@@ -1020,7 +986,7 @@ class Environment:
                             )
                         )
                 statement = \
-                    TypedASTNode(
+                    Node(
                         'return',
                         expr = expr,
                         ty = void,
@@ -1030,7 +996,7 @@ class Environment:
                 expr = self.check_expression(first_statement.expr)
                 matches = self.check_matches(expr.ty, first_statement.matches)
                 statement = \
-                    TypedASTNode(
+                    Node(
                         'match',
                         expr = expr,
                         matches = matches,
@@ -1054,7 +1020,7 @@ class Environment:
             new_env, arg_pattern = new_env.check_pattern(arg_type, arg_pattern)
             args.append(arg_pattern)
         pattern = \
-            TypedASTNode(
+            Node(
                 'constructor',
                 name = pattern.name,
                 args = args,
@@ -1065,7 +1031,7 @@ class Environment:
     def check_wildcard_pattern(self, enum_type, pattern):
         new_env = Environment({}, {pattern.name: enum_type}, self)
         pattern = \
-            TypedASTNode(
+            Node(
                 'wildcard',
                 name = pattern.name,
                 ty = enum_type,
@@ -1094,7 +1060,7 @@ class Environment:
         if l_expr.tag == 'variable':
             ty = self.lookup_term(l_expr.name)
             return \
-                TypedASTNode(
+                Node(
                     'variable',
                     name = l_expr.name,
                     ty = ty,
@@ -1107,7 +1073,7 @@ class Environment:
                 raise TypeError()
             field_ty = root.ty.fields[l_expr.field]
             return \
-                TypedASTNode(
+                Node(
                     'field_access',
                     l_expr = root,
                     field = l_expr.field,
@@ -1118,7 +1084,7 @@ class Environment:
             if not is_ptr(expr.ty):
                 raise TypeError()
             return \
-                TypedASTNode(
+                Node(
                     'deref',
                     expr = expr,
                     ty = expr.ty.args[0],
@@ -1131,7 +1097,7 @@ class Environment:
             if not is_number(index.ty):
                 raise TypeError()
             return \
-                TypedASTNode(
+                Node(
                     'array_access',
                     l_expr = root,
                     index = index,
@@ -1201,7 +1167,7 @@ class Environment:
             )
         body = new_env.check_body(decl.body)
         return \
-            TypedASTNode(
+            Node(
                 'function',
                 name = decl.name,
                 type_params = type_params,
@@ -1216,7 +1182,7 @@ class Environment:
         expr = self.check_expression(decl.expr)
         self.term_bindings[decl.name] = expr.ty
         return \
-            TypedASTNode(
+            Node(
                 'constant',
                 name = decl.name,
                 expr = expr,
@@ -1227,7 +1193,7 @@ class Environment:
         self.type_bindings[decl.module] = module_type
         self.term_bindings[decl.module] = module_type
         return \
-            TypedASTNode(
+            Node(
                 'import',
                 module = decl.module,
             )
