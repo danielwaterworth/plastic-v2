@@ -16,122 +16,35 @@ def substitutable_for(a, b):
     if a == b:
         return True
 
-    if type(a) == OpaquePtr:
+    if a == opaque_ptr:
         return is_ptr(b)
-    if type(a) == OpaqueNumberType:
-        return type(b) == NumberType
+    if a == opaque_number_type:
+        return b.tag == 'number_type'
 
     return False
 
-class Void:
-    kind = star
+void = Node('void', kind = star)
+ptr = Node('void', kind = function_kind([star], star))
+array = Node('array', kind = function_kind([star, nat], star))
 
-    def __eq__(self, other):
-        return type(other) == Void
+def tuple_type(n):
+    return \
+        Node(
+            'tuple',
+            n = n,
+            kind = function_kind([star] * self.n, star),
+        )
 
-void = Void()
+def nat_literal(n):
+    return Node('nat_literal', n = n, kind = nat)
 
-class Ptr:
-    kind = function_kind([star], star)
+opaque_ptr = Node('opaque_ptr', kind = star)
+boolean = Node('boolean', kind = star)
 
-    def __eq__(self, other):
-        return type(other) == Ptr
+def number_type(signed, width):
+    return Node('number_type', signed = signed, width = width, kind = star)
 
-    def __repr__(self):
-        return 'ptr'
-
-ptr = Ptr()
-
-class Array:
-    kind = function_kind([star, nat], star)
-
-    def __eq__(self, other):
-        return type(other) == Array
-
-    def __repr__(self):
-        return 'array'
-
-array = Array()
-
-class Tuple:
-    def __init__(self, n):
-        self.n = n
-
-    @property
-    def kind(self):
-        return function_kind([star] * self.n, star)
-
-    def __eq__(self, other):
-        return type(other) == Tuple and self.n == other.n
-
-    def __repr__(self):
-        if self.n == '0':
-            return '()'
-        else:
-            return '(' + ','*(self.n-1) + ')'
-
-class NatLiteral:
-    kind = nat
-
-    def __init__(self, n):
-        self.n = n
-
-    def __eq__(self, other):
-        return type(other) == NatLiteral and self.n == other.n
-
-class OpaquePtr:
-    kind = star
-
-class Boolean:
-    kind = star
-
-    def __eq__(self, other):
-        return type(other) == Boolean
-
-    def __repr__(self):
-        return 'boolean'
-
-boolean = Boolean()
-
-class NumberType:
-    kind = star
-
-    def __init__(self, signed, width):
-        self.signed = signed
-        self.width = width
-
-    def __eq__(self, other):
-        return \
-            type(other) == NumberType and \
-            self.signed == other.signed and \
-            self.width == other.width
-
-    def __repr__(self):
-        return "NumberType(%s, %d)" % (str(self.signed), self.width)
-
-class OpaqueNumberType:
-    kind = star
-
-    def __eq__(self, other):
-        return type(other) == OpaqueNumberType
-
-class TypeApplication:
-    def __init__(self, function, args):
-        self.function = function
-        self.args = args
-
-    @property
-    def kind(self):
-        return self.function.kind.return_kind
-
-    def __eq__(self, other):
-        return \
-            type(other) == TypeApplication and \
-            self.function == other.function and \
-            tuple(self.args) == tuple(other.args)
-
-    def __repr__(self):
-        return "type_apply(%s, %s)" % (self.function, self.args)
+opaque_number_type = Node('opaque_number_type', kind = star)
 
 def type_apply(fn, args):
     if fn.kind.tag != 'function':
@@ -143,12 +56,18 @@ def type_apply(fn, args):
     arg_kinds = [arg.kind for arg in args]
     if fn_arg_kinds != arg_kinds:
         raise TypeError()
-    if type(fn) == LambdaType:
+    if fn.tag == 'lambda_tag':
         names = [name for name, _ in fn.args]
         substitutions = dict(zip(names, args))
         return substitute(fn.body, substitutions)
     else:
-        return TypeApplication(fn, args)
+        return \
+            Node(
+                'type_application',
+                function = fn,
+                args = args,
+                kind = fn.kind.return_kind
+            )
 
 def ptr_to(ty):
     return type_apply(ptr, [ty])
@@ -201,62 +120,38 @@ class EnumType:
                 self.constructors,
             )
 
-class Coroutine:
-    kind = function_kind([star] * 3, star)
+coroutine = Node('coroutine', kind = function_kind([star] * 3, star))
 
-    def __eq__(self, other):
-        return type(other) == Coroutine
+def function_type(calling_convention, arg_types, return_type):
+    return \
+        Node(
+            'function_type',
+            calling_convention = calling_convention,
+            arg_types = arg_types,
+            return_type = return_type,
+            kind = star,
+        )
 
-class FunctionType:
-    def __init__(self, calling_convention, arg_types, return_type):
-        self.calling_convention = calling_convention
-        self.arg_types = arg_types
-        self.return_type = return_type
+def type_variable(name, kind):
+    return \
+        Node(
+            'type_variable',
+            name = name,
+            kind = kind,
+        )
 
-    @property
-    def kind(self):
-        return star
-
-    def __repr__(self):
-        return \
-            "FunctionType(%s, %s, %s)" % (
-                repr(self.calling_convention),
-                self.arg_types,
-                self.return_type
-            )
-
-class TypeVariable:
-    def __init__(self, name, kind):
-        self.name = name
-        self.k = kind
-
-    @property
-    def kind(self):
-        return self.k
-
-    def __repr__(self):
-        return "TypeVariable(%s, %s)" % (repr(self.name), self.k)
-
-class LambdaType:
-    def __init__(self, args, body):
-        self.args = args
-        self.body = body
-
-    @property
-    def kind(self):
-        arg_kinds = [kind for _, kind in self.args]
-        return function_kind(arg_kinds, self.body.kind)
-
-    def __repr__(self):
-        return "LambdaType(%s, %s)" % (self.args, self.body)
+def lambda_type(args, body):
+    arg_kinds = [kind for _, kind in args]
+    kind = function_kind(arg_kinds, body.kind)
+    return \
+        Node(
+            'lambda_type',
+            args = args,
+            body = body,
+            kind = kind,
+        )
 
 def substitute(x, substitutions):
-    if type(x) == TypeApplication:
-        return \
-            type_apply(
-                substitute(x.function, substitutions),
-                [substitute(arg, substitutions) for arg in x.args],
-            )
     if type(x) == StructType:
         StructType(
             x.module_name,
@@ -277,27 +172,33 @@ def substitute(x, substitutions):
                     for type_arg in x.type_args],
                 new_constructors,
             )
-    if type(x) == FunctionType:
+    if x.tag == 'function_type':
         return \
-            FunctionType(
+            function_type(
                 x.calling_convention,
                 [substitute(arg, substitutions) for arg in x.arg_types],
                 substitute(x.return_type, substitutions),
             )
-    if type(x) == TypeVariable:
+    if x.tag == 'type_variable':
         return substitutions.get(x.name, x)
-    if type(x) == LambdaType:
+    if x.tag == 'lambda_type':
         substitutions = dict(substitutions)
         for arg in x.args:
             del substitutions[arg[0]]
         return \
-            LambdaType(
+            lambda_type(
                 x.args,
                 substitute(x.body, substitutions)
             )
+    if x.tag == 'type_application':
+        return \
+            type_apply(
+                substitute(x.function, substitutions),
+                [substitute(arg, substitutions) for arg in x.args],
+            )
     return x
 
-char = NumberType(True, 8)
+char = number_type(True, 8)
 char_ptr = ptr_to(char)
 
 def list_substitutable_for(args, expected):
@@ -306,27 +207,27 @@ def list_substitutable_for(args, expected):
         all([substitutable_for(arg, exp) for arg, exp in zip(args, expected)])
 
 def is_ptr(x):
-    if type(x) == OpaquePtr:
+    if x == opaque_ptr:
         return True
-    if type(x) == TypeApplication:
-        if type(x.function) == Ptr:
+    if type(x) == Node and x.tag == 'type_application':
+        if x.function == ptr:
             return True
     return False
 
 def is_array(x):
-    if type(x) == TypeApplication:
-        if type(x.function) == Array:
+    if type(x) == Node and x.tag == 'type_application':
+        if x.function == array:
             return True
     return False
 
 def is_tuple(x):
-    if type(x) == TypeApplication:
-        if type(x.function) == Tuple:
+    if type(x) == Node and x.tag == 'type_application':
+        if x.function.tag == 'tuple':
             return True
     return False
 
 def is_number(x):
-    return type(x) in [NumberType, OpaqueNumberType]
+    return x.tag == 'number_type' or x == opaque_number_type
 
 class ModuleType:
     kind = module_kind
@@ -406,7 +307,7 @@ class Environment:
             function_kind = function.kind
             return type_apply(function, args)
         elif ty.tag == 'type_number':
-            return NatLiteral(ty.n)
+            return nat_literal(ty.n)
         elif ty.tag == 'field_access':
             module = self.check_type(ty.ty)
             if module.kind != module_kind:
@@ -414,7 +315,7 @@ class Environment:
             return module.types[ty.field]
         elif ty.tag == 'tuple':
             types = self.check_type_list(ty.types)
-            return type_apply(Tuple(len(types)), types)
+            return type_apply(tuple_type(len(types)), types)
         raise NotImplementedError()
 
     def check_type_list(self, types):
@@ -438,7 +339,7 @@ class Environment:
     def check_struct(self, decl):
         type_param_kinds = self.check_type_params(decl.type_params)
         type_params = \
-            [(name, TypeVariable(name, kind))
+            [(name, type_variable(name, kind))
                 for name, kind in type_param_kinds]
         type_args = [arg for _, arg in type_params]
         new_env = \
@@ -451,7 +352,7 @@ class Environment:
         struct_type = StructType(self.module_name, decl.name, type_args)
         if len(type_param_kinds) > 0:
             self.type_bindings[decl.name] = \
-                LambdaType(
+                lambda_type(
                     type_param_kinds,
                     struct_type,
                 )
@@ -463,7 +364,7 @@ class Environment:
         struct_type.fields = dict(fields)
 
         constructor_type = \
-            FunctionType(
+            function_type(
                 'plastic',
                 [ty for _, ty in fields],
                 struct_type,
@@ -471,7 +372,7 @@ class Environment:
 
         if len(type_param_kinds) > 0:
             self.term_bindings[decl.name] = \
-                LambdaType(
+                lambda_type(
                     type_param_kinds,
                     constructor_type,
                 )
@@ -490,7 +391,7 @@ class Environment:
     def check_enum(self, decl):
         type_param_kinds = self.check_type_params(decl.type_params)
         type_params = \
-            [(name, TypeVariable(name, kind))
+            [(name, type_variable(name, kind))
                 for name, kind in type_param_kinds]
         type_args = [arg for _, arg in type_params]
         new_env = \
@@ -503,7 +404,7 @@ class Environment:
         enum_type = EnumType(self.module_name, decl.name, type_args)
         if len(type_param_kinds) > 0:
             self.type_bindings[decl.name] = \
-                LambdaType(
+                lambda_type(
                     type_param_kinds,
                     enum_type,
                 )
@@ -516,10 +417,10 @@ class Environment:
 
         for name, args in constructors:
             constructor_type = \
-                FunctionType('plastic', args, enum_type)
+                function_type('plastic', args, enum_type)
             if len(type_param_kinds) > 0:
                 self.term_bindings[name] = \
-                    LambdaType(
+                    lambda_type(
                         type_param_kinds,
                         constructor_type,
                     )
@@ -539,7 +440,7 @@ class Environment:
         arg_types = self.check_type_list(decl.arg_types)
         return_type = self.check_type(decl.return_type)
         self.term_bindings[decl.name] = \
-            FunctionType('c', arg_types, return_type)
+            function_type('c', arg_types, return_type)
         return \
             Node(
                 'extern',
@@ -564,8 +465,8 @@ class Environment:
             function = self.check_expression(expr.function)
             args = self.check_expression_list(expr.args)
             arg_types = [arg.ty for arg in args]
-            if type(function.ty) != FunctionType:
-                if type(function.ty) == LambdaType:
+            if function.ty.tag != 'function_type':
+                if function.ty.tag == 'lambda_type':
                     raise TypeError("Need to specify type args first")
                 else:
                     raise TypeError()
@@ -648,11 +549,11 @@ class Environment:
             to_cast = self.check_expression(expr.expr)
             from_ty = to_cast.ty
             to_ty = self.check_type(expr.type)
-            if type(to_ty) == NumberType:
+            if to_ty.tag == 'number_type':
                 castable = \
-                    type(from_ty) == NumberType or \
+                    from_ty.tag == 'number_type' or \
                     is_ptr(from_ty) or \
-                    type(from_ty) == OpaqueNumberType
+                    from_ty == opaque_number_type
                 if not castable:
                     raise TypeError()
             elif is_ptr(to_ty):
@@ -671,14 +572,14 @@ class Environment:
                 Node(
                     'number_literal',
                     n = ord(expr.character),
-                    ty = NumberType(False, 8),
+                    ty = number_type(False, 8),
                 )
         elif expr.tag == 'number_literal':
             return \
                 Node(
                     'number_literal',
                     n = expr.n,
-                    ty = OpaqueNumberType(),
+                    ty = opaque_number_type,
                 )
         elif expr.tag == 'string_literal':
             return \
@@ -689,10 +590,10 @@ class Environment:
                 )
         elif expr.tag == 'apply_type_args':
             function = self.check_expression(expr.function)
-            if type(function.ty) != LambdaType:
+            if type(function.ty) != lambda_type:
                 raise \
                     TypeError(
-                        'Expected %s to be a LambdaType' % function.ty
+                        'Expected %s to be a lambda_type' % function.ty
                     )
             args = self.check_type_list(expr.args)
             new_type = type_apply(function.ty, args)
@@ -765,7 +666,7 @@ class Environment:
                     values = values,
                     ty = \
                         type_apply(
-                            Tuple(len(values)),
+                            tuple_type(len(values)),
                             types,
                         )
                 )
@@ -820,7 +721,7 @@ class Environment:
                     )
             else:
                 raise TypeError()
-            if not type(a.ty) == NumberType:
+            if not a.ty.tag == 'number_type':
                 print(a)
                 raise TypeError()
             return \
@@ -852,7 +753,7 @@ class Environment:
                     )
             else:
                 raise TypeError()
-            if not type(a.ty) == NumberType:
+            if not a.ty.tag == 'number_type':
                 print(a)
                 raise TypeError()
             return \
@@ -878,7 +779,7 @@ class Environment:
             ty = self.check_type(statement.ty)
             if expr:
                 if not substitutable_for(expr.ty, ty):
-                    raise ParseError()
+                    raise TypeError()
                 if expr.ty != ty:
                     expr = \
                         Node(
@@ -909,7 +810,7 @@ class Environment:
 
     def check_if(self, statement):
         condition = self.check_expression(statement.condition)
-        if type(condition.ty) != Boolean:
+        if condition.ty != boolean:
             raise TypeError()
         true_side = self.check_body(statement.true_side)
         false_side = self.check_body(statement.false_side)
@@ -1102,7 +1003,7 @@ class Environment:
     def check_function(self, decl):
         type_param_kinds = self.check_type_params(decl.type_params)
         type_params = \
-            [(name, TypeVariable(name, kind))
+            [(name, type_variable(name, kind))
                 for name, kind in type_param_kinds]
         new_env = \
             Environment(
@@ -1122,10 +1023,10 @@ class Environment:
 
         if consume_type or product_type:
             fn_type = \
-                FunctionType(
+                function_type(
                     'plastic',
                     [ty for _, ty in args],
-                    type_apply(Coroutine(), [
+                    type_apply(coroutine, [
                         consume_type or void,
                         product_type or void,
                         return_type,
@@ -1133,7 +1034,7 @@ class Environment:
                 )
         else:
             fn_type = \
-                FunctionType(
+                function_type(
                     'plastic',
                     [ty for _, ty in args],
                     return_type,
@@ -1141,7 +1042,7 @@ class Environment:
 
         if len(type_params) > 0:
             self.term_bindings[decl.name] = \
-                LambdaType(
+                lambda_type(
                     type_param_kinds,
                     fn_type,
                 )
@@ -1213,37 +1114,37 @@ global_type_environment = {
     'ptr': ptr,
     'array': array,
     'i8': char,
-    'u8': NumberType(False, 8),
-    'i16': NumberType(True, 16),
-    'i32': NumberType(True, 32),
-    'u32': NumberType(False, 32),
-    'i64': NumberType(True, 64),
-    'u64': NumberType(False, 64),
+    'u8': number_type(False, 8),
+    'i16': number_type(True, 16),
+    'i32': number_type(True, 32),
+    'u32': number_type(False, 32),
+    'i64': number_type(True, 64),
+    'u64': number_type(False, 64),
     'bool': boolean,
 }
 
 global_term_environment = {
-    'null': OpaquePtr(),
+    'null': opaque_ptr,
     'void': void,
     'true': boolean,
     'false': boolean,
     'resume':
-        LambdaType(
+        lambda_type(
             [('a', star), ('b', star), ('c', star)],
-            FunctionType(
+            function_type(
                 'plastic',
                 [
                     type_apply(
-                        Coroutine(),
+                        coroutine,
                         [
-                            TypeVariable('a', star),
-                            TypeVariable('b', star),
-                            TypeVariable('c', star),
+                            type_variable('a', star),
+                            type_variable('b', star),
+                            type_variable('c', star),
                         ]
                     ),
-                    TypeVariable('a', star),
+                    type_variable('a', star),
                 ],
-                TypeVariable('b', star),
+                type_variable('b', star),
             )
         )
 }

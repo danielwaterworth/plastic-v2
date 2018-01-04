@@ -451,7 +451,6 @@ class FunctionWriter:
             else:
                 raise NotImplementedError()
         elif expr.tag == 'comparison_operator':
-            assert type(expr.a.ty) == type_checker.NumberType
             if expr.a.ty.signed:
                 ops = {
                     '<': 'slt',
@@ -819,9 +818,7 @@ class CodeGenerator:
         return ty, value
 
     def generate_type(self, ty):
-        if type(ty) == type_checker.NumberType:
-            return number(ty.width)
-        elif type_checker.is_ptr(ty):
+        if type_checker.is_ptr(ty):
             return ptr_to(self.generate_type(ty.args[0]))
         elif type_checker.is_array(ty):
             of = self.generate_type(ty.args[0])
@@ -845,18 +842,20 @@ class CodeGenerator:
                 return named_type(ty.module_name, ty.name, version)
             else:
                 return named_type(ty.module_name, ty.name)
-        elif type(ty) == type_checker.Void:
+        elif ty == type_checker.void:
             return void
-        elif type(ty) == type_checker.Boolean:
+        elif ty == type_checker.boolean:
             return number(1)
-        elif type(ty) == type_checker.OpaqueNumberType:
+        elif ty == type_checker.opaque_number_type:
             return number(64)
-        elif type(ty) == type_checker.LambdaType:
+        elif ty.tag == 'lambda_type':
             raise NotImplementedError()
-        elif type(ty) == type_checker.TypeVariable:
+        elif ty.tag == 'type_variable':
             return self.type_scope[ty.name]
-        elif type(ty) == type_checker.NatLiteral:
+        elif ty.tag == 'nat_literal':
             return nat(ty.n)
+        elif ty.tag == 'number_type':
+            return number(ty.width)
         print(ty)
         raise NotImplementedError()
 

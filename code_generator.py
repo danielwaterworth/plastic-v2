@@ -534,7 +534,7 @@ class CodeGenerator:
                     'named_type',
                     name = ty.name,
                 )
-        elif type(ty) == type_checker.Void:
+        elif ty == type_checker.void:
             return void
         elif type(ty) == type_checker.Boolean:
             return \
