@@ -1,15 +1,188 @@
+from ir import *
+
+comparisons = [
+    '<',
+    '>',
+    '>=',
+    '<=',
+    '==',
+    '!=',
+]
+
+operators = [
+    '+',
+    '-',
+    '*',
+    '/',
+    '&',
+    '|',
+]
+
+AST = \
+    Representation(
+        'AST',
+        {
+            'Decl': {
+                'function': {
+                    'name': Str,
+                    'product_type': OrNone('Type'),
+                    'consume_type': OrNone('Type'),
+                    'return_type': 'Type',
+                    'type_params': List(Tuple(Str, 'Kind')),
+                    'args': List(Tuple(Str, 'Type')),
+                    'body': List('Statement'),
+                },
+                'struct': {
+                    'name': Str,
+                    'type_params': List(Tuple(Str, 'Kind')),
+                    'fields': List(Tuple(Str, 'Type')),
+                },
+                'enum': {
+                    'name': Str,
+                    'type_params': List(Tuple(Str, 'Kind')),
+                    'constructors': List(Tuple(Str, List('Type'))),
+                },
+                'extern': {
+                    'name': Str,
+                    'arg_types': List('Type'),
+                    'return_type': 'Type',
+                },
+                'constant': {
+                    'name': Str,
+                    'expr': 'Expr',
+                },
+                'import': {
+                    'module': Str,
+                },
+            },
+            'LExpr': {
+                'variable': {
+                    'name': Str,
+                },
+                'array_access': {
+                    'l_expr': 'LExpr',
+                    'index': 'Expr',
+                },
+            },
+            'Expr': {
+                'variable': {
+                    'name': Str,
+                },
+                'apply_type_args': {
+                    'function': 'Expr',
+                    'args': List('Type'),
+                },
+                'application': {
+                    'function': 'Expr',
+                    'args': List('Expr'),
+                },
+                'address_of': {
+                    'expr': 'LExpr',
+                },
+                'number_literal': {
+                    'n': Int,
+                },
+                'uminus': {
+                    'expr': 'Expr',
+                },
+                'field_access': {
+                    'x': 'Expr',
+                    'field': Str,
+                },
+                'array_access': {
+                    'expr': 'Expr',
+                    'index': 'Expr',
+                },
+                'string_literal': {
+                    'string': Str,
+                },
+                'cast': {
+                    'expr': 'Expr',
+                    'type': 'Type',
+                },
+                'compare': {
+                    'operator': OneOf(*comparisons),
+                    'a': 'Expr',
+                    'b': 'Expr',
+                },
+                'binop': {
+                    'operator': OneOf(*operators),
+                    'a': 'Expr',
+                    'b': 'Expr',
+                },
+                'deref': {
+                    'expr': 'Expr',
+                },
+            },
+            'Type': {
+                'named_type': {
+                    'name': Str,
+                },
+                'type_application': {
+                    'function': 'Type',
+                    'args': List('Type'),
+                },
+                'tuple': {
+                    'types': List('Type'),
+                },
+                'type_number': {
+                    'n': Int,
+                },
+                'field_access': {
+                    'ty': 'Type',
+                    'field': Str,
+                }
+            },
+            'Pattern': {
+                'constructor': {
+                    'name': Str,
+                    'args': List('Pattern'),
+                },
+                'wildcard': {
+                    'name': Str,
+                },
+            },
+            'Statement': {
+                'match': {
+                    'expr': 'Expr',
+                    'matches': List(Tuple('Pattern', List('Statement'))),
+                },
+                'loop_statement': {
+                    'body': List('Statement'),
+                },
+                'break': {},
+                'if_statement': {
+                    'condition': 'Expr',
+                    'true_side': List('Statement'),
+                    'false_side': List('Statement'),
+                },
+                'let_statement': {
+                    'expr': OrNone('Expr'),
+                    'ty': OrNone('Type'),
+                    'name': Str,
+                },
+                'return': {
+                    'expr': 'Expr',
+                },
+                'assignment': {
+                    'l_expr': 'LExpr',
+                    'expr': 'Expr',
+                },
+                'expr_statement': {
+                    'expr': 'Expr',
+                },
+            },
+            'Kind': {
+                'star': {},
+                'named_kind': {
+                    'name': Str
+                }
+            },
+        },
+    )
+
 class ParseError(Exception):
     pass
-
-class ASTNode:
-    def __init__(self, tag, **kwargs):
-        self.tag = tag
-        self.attributes = kwargs
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-
-    def __repr__(self):
-        return "ASTNode(%s, %s)" % (repr(self.tag), repr(self.attributes))
 
 class Parser:
     def __init__(self, tokens):
@@ -80,11 +253,11 @@ class Parser:
     def parse_type_0(self):
         if self.next.tag == 'identifier':
             name = self.parse_identifier()
-            output = ASTNode('named_type', name = name)
+            output = Node('named_type', name = name)
             if not self.eof() and self.next.tag == 'open_paren':
                 self.advance()
                 return \
-                    ASTNode(
+                    Node(
                         'type_application',
                         function = output,
                         args = self.parse_type_arg_list(),
@@ -94,7 +267,7 @@ class Parser:
         elif self.next.tag == 'number':
             n = self.parse_number()
             return \
-                ASTNode(
+                Node(
                     'type_number',
                     n = n,
                 )
@@ -105,7 +278,7 @@ class Parser:
                 return output[0]
             else:
                 return \
-                    ASTNode(
+                    Node(
                         'tuple',
                         types = output,
                     )
@@ -118,7 +291,7 @@ class Parser:
             self.advance()
             field = self.parse_identifier()
             output = \
-                ASTNode(
+                Node(
                     'field_access',
                     ty = output,
                     field = field,
@@ -131,10 +304,10 @@ class Parser:
     def parse_kind(self):
         if self.next.tag == 'asterisk':
             self.advance()
-            return ASTNode('star')
+            return Node('star')
         elif self.next.tag == 'identifier':
             name = self.parse_identifier()
-            return ASTNode('named_kind', name = name)
+            return Node('named_kind', name = name)
         raise NotImplementedError()
 
     def parse_enum(self):
@@ -161,7 +334,7 @@ class Parser:
                 constructors.append((constructor_name, values))
 
         return \
-            ASTNode(
+            Node(
                 'enum',
                 name = name,
                 constructors = constructors,
@@ -189,7 +362,7 @@ class Parser:
                 self.expect('comma')
                 fields.append((field_name, value))
         return \
-            ASTNode(
+            Node(
                 'struct',
                 name = name,
                 type_params = type_params,
@@ -217,25 +390,25 @@ class Parser:
                 return values[0]
             else:
                 return \
-                    ASTNode(
+                    Node(
                         'tuple',
                         values = values,
                     )
         elif self.next.tag == 'character':
             c = self.next.c
             self.advance()
-            return ASTNode('character_literal', character = c)
+            return Node('character_literal', character = c)
         elif self.next.tag == 'string':
             st = self.next.string
             self.advance()
-            return ASTNode('string_literal', string = st)
+            return Node('string_literal', string = st)
         elif self.next.tag == 'identifier':
             name = self.next.name
             self.advance()
-            return ASTNode('variable', name = name)
+            return Node('variable', name = name)
         else:
             n = self.parse_number()
-            return ASTNode('number_literal', n = n)
+            return Node('number_literal', n = n)
 
     def parse_expression_1(self):
         expr = self.parse_expression_0()
@@ -243,21 +416,21 @@ class Parser:
             if self.next.tag == 'open_paren':
                 self.advance()
                 args = self.parse_term_arg_list()
-                expr = ASTNode('application', function = expr, args = args)
+                expr = Node('application', function = expr, args = args)
             elif self.next.tag == 'dot':
                 self.advance()
                 field = self.parse_identifier()
-                expr = ASTNode('field_access', x = expr, field = field)
+                expr = Node('field_access', x = expr, field = field)
             elif self.next.tag == 'at':
                 self.advance()
                 self.expect('open_paren')
                 args = self.parse_type_arg_list()
-                expr = ASTNode('apply_type_args', function = expr, args = args)
+                expr = Node('apply_type_args', function = expr, args = args)
             elif self.next.tag == 'open_square':
                 self.advance()
                 index = self.parse_expression()
                 self.expect('close_square')
-                expr = ASTNode('array_access', expr = expr, index = index)
+                expr = Node('array_access', expr = expr, index = index)
             else:
                 break
         return expr
@@ -267,7 +440,7 @@ class Parser:
             self.advance()
             expr = self.parse_l_expr()
             return \
-                ASTNode(
+                Node(
                     'address_of',
                     expr = expr,
                 )
@@ -275,7 +448,7 @@ class Parser:
             self.advance()
             expr = self.parse_expression_2()
             return \
-                ASTNode(
+                Node(
                     'uminus',
                     expr = expr,
                 )
@@ -287,7 +460,7 @@ class Parser:
             self.advance()
             expr = self.parse_expression_3()
             return \
-                ASTNode(
+                Node(
                     'deref',
                     expr = expr,
                 )
@@ -300,7 +473,7 @@ class Parser:
             if self.next.tag == 'keyword' and self.next.keyword == 'as':
                 self.advance()
                 type = self.parse_type()
-                expr = ASTNode('cast', expr = expr, type = type)
+                expr = Node('cast', expr = expr, type = type)
             else:
                 break
         return expr
@@ -311,15 +484,15 @@ class Parser:
             if self.next.tag == 'asterisk':
                 self.advance()
                 other = self.parse_expression_4()
-                expr = ASTNode('*', a = expr, b = other)
+                expr = Node('binop', operator = '*', a = expr, b = other)
             elif self.next.tag == 'symbol' and self.next.symbol == '/':
                 self.advance()
                 other = self.parse_expression_4()
-                expr = ASTNode('/', a = expr, b = other)
+                expr = Node('binop', operator = '/', a = expr, b = other)
             elif self.next.tag == 'ampersand':
                 self.advance()
                 other = self.parse_expression_4()
-                expr = ASTNode('&', a = expr, b = other)
+                expr = Node('binop', operator = '&', a = expr, b = other)
             else:
                 break
         return expr
@@ -332,7 +505,7 @@ class Parser:
                 if self.next.symbol in ['-', '+', '|']:
                     self.advance()
                     other = self.parse_expression_5()
-                    expr = ASTNode(symbol, a = expr, b = other)
+                    expr = Node('binop', operator = symbol, a = expr, b = other)
                 else:
                     break
             else:
@@ -347,7 +520,8 @@ class Parser:
                 if symbol in ['==', '!=', '<', '<=', '>', '>=']:
                     self.advance()
                     other = self.parse_expression_6()
-                    expr = ASTNode(symbol, a = expr, b = other)
+                    expr = \
+                        Node('compare', operator = symbol, a = expr, b = other)
                 else:
                     break
             else:
@@ -371,14 +545,14 @@ class Parser:
                     args.append(match)
             self.expect('close_paren')
             return \
-                ASTNode(
+                Node(
                     'constructor',
                     name = name,
                     args = args,
                 )
         else:
             return \
-                ASTNode(
+                Node(
                     'wildcard',
                     name = name,
                 )
@@ -398,13 +572,13 @@ class Parser:
             self.expect_symbol('=')
             expr = self.parse_expression()
             self.expect('semicolon')
-        return ASTNode('let_statement', name = name, expr = expr, ty = ty)
+        return Node('let_statement', name = name, expr = expr, ty = ty)
 
     def parse_loop_statement(self):
         self.expect_keyword('loop')
         self.expect('open_brace')
         body = self.parse_body()
-        return ASTNode('loop_statement', body = body)
+        return Node('loop_statement', body = body)
 
     def parse_else(self):
         self.expect_keyword('else')
@@ -419,7 +593,7 @@ class Parser:
         false_side = self.try_(self.parse_else) or []
 
         return \
-            ASTNode(
+            Node(
                 'if_statement',
                 condition = condition,
                 true_side = true_side,
@@ -431,7 +605,7 @@ class Parser:
         self.expect_symbol('=')
         expr = self.parse_expression()
         self.expect('semicolon')
-        return ASTNode('assignment', l_expr = l_expr, expr = expr)
+        return Node('assignment', l_expr = l_expr, expr = expr)
 
     def parse_l_expr(self):
         return self.parse_l_expr_2()
@@ -441,7 +615,7 @@ class Parser:
             self.advance()
             expr = self.parse_expression()
             return \
-                ASTNode(
+                Node(
                     'deref',
                     expr = expr,
                 )
@@ -455,7 +629,7 @@ class Parser:
                 self.advance()
                 field = self.parse_identifier()
                 l_expr = \
-                    ASTNode(
+                    Node(
                         'field_access',
                         l_expr = l_expr,
                         field = field,
@@ -467,7 +641,7 @@ class Parser:
                     raise ParseError()
                 self.advance()
                 l_expr = \
-                    ASTNode(
+                    Node(
                         'array_access',
                         l_expr = l_expr,
                         index = expr,
@@ -481,7 +655,7 @@ class Parser:
         else:
             name = self.parse_identifier()
             return \
-                ASTNode(
+                Node(
                     'variable',
                     name = name,
                 )
@@ -495,13 +669,13 @@ class Parser:
     def parse_break(self):
         self.expect_keyword('break')
         self.expect('semicolon')
-        return ASTNode('break')
+        return Node('break')
 
     def parse_return(self):
         self.expect_keyword('return')
         expr = self.parse_expression()
         self.expect('semicolon')
-        return ASTNode('return', expr = expr)
+        return Node('return', expr = expr)
 
     def parse_match_statement(self):
         self.expect_keyword('match')
@@ -514,7 +688,7 @@ class Parser:
             body = self.parse_body()
             matches.append((pattern, body))
         self.expect('close_brace')
-        return ASTNode('match', expr = expr, matches = matches)
+        return Node('match', expr = expr, matches = matches)
 
     def try_(self, func):
         self.save()
@@ -547,7 +721,7 @@ class Parser:
 
         expr = self.parse_expression()
         self.expect('semicolon')
-        return ASTNode('expr_statement', expr = expr)
+        return Node('expr_statement', expr = expr)
 
     def parse_body(self):
         statements = []
@@ -565,7 +739,7 @@ class Parser:
         args = []
         product_type = None
         consume_type = None
-        return_type = ASTNode('named_type', name = 'void')
+        return_type = Node('named_type', name = 'void')
         body = None
 
         if self.next.tag == 'at':
@@ -608,7 +782,7 @@ class Parser:
         body = self.parse_body()
 
         return \
-            ASTNode(
+            Node(
                 'function',
                 name = name,
                 type_params = type_params,
@@ -623,7 +797,7 @@ class Parser:
         name = self.parse_identifier()
 
         arg_types = []
-        return_type = ASTNode('void')
+        return_type = Node('void')
 
         if self.next.tag == 'symbol':
             symbol = self.parse_symbol()
@@ -654,7 +828,7 @@ class Parser:
             raise ParseError()
 
         return \
-            ASTNode(
+            Node(
                 'extern',
                 name = name,
                 arg_types = arg_types,
@@ -665,7 +839,7 @@ class Parser:
         name = self.parse_identifier()
         expr = self.parse_expression()
         return \
-            ASTNode(
+            Node(
                 'constant',
                 name = name,
                 expr = expr,
@@ -674,7 +848,7 @@ class Parser:
     def parse_import(self):
         module = self.parse_identifier()
         return \
-            ASTNode(
+            Node(
                 'import',
                 module = module,
             )
@@ -701,4 +875,5 @@ class Parser:
         while not self.eof():
             decl = self.parse_top_level_decl()
             decls.append(decl)
+        AST.check(List('Decl'), decls)
         return decls

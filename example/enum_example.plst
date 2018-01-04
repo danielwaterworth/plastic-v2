@@ -1,7 +1,8 @@
 enum
   test
-    foo(),
-    bar(i32),
+    constructors
+      foo(),
+      bar(i32),
 
 extern
   puts
