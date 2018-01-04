@@ -32,6 +32,15 @@ class Node:
     def __repr__(self):
         return "Node(%s, %s)" % (repr(self.tag), repr(self.attributes))
 
+    def sorted_attribute_tuple(self):
+        return tuple(sorted(self.attributes.items()))
+
+    def __eq__(self, other):
+        return \
+            type(other) == Node and \
+            self.tag == other.tag and \
+            self.sorted_attribute_tuple() == other.sorted_attribute_tuple()
+
 class Representation:
     def __init__(self, name, types):
         self.name = name
