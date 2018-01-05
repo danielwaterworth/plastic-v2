@@ -820,7 +820,7 @@ class Environment:
             return \
                 Node(
                     'binary_operator',
-                    operator = expr.operator,
+                    operator = node.operator,
                     a = a,
                     b = b,
                     ty = a.ty,

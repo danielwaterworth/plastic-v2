@@ -1,5 +1,6 @@
 import network
 import console
+import hash_table
 
 define
   initialize_accept_socket
