@@ -101,7 +101,7 @@ AST = \
                 },
                 'cast': {
                     'expr': 'Expr',
-                    'type': 'Type',
+                    'ty': 'Type',
                 },
                 'equality_operator': {
                     'operator': OneOf(*equality_operators),
@@ -480,8 +480,8 @@ class Parser:
         while not self.eof():
             if self.next.tag == 'keyword' and self.next.keyword == 'as':
                 self.advance()
-                type = self.parse_type()
-                expr = Node('cast', expr = expr, type = type)
+                ty = self.parse_type()
+                expr = Node('cast', expr = expr, ty = ty)
             else:
                 break
         return expr

@@ -1,4 +1,85 @@
 from ir import *
+import plst_parser
+import copy
+
+types = copy.deepcopy(plst_parser.AST.types)
+
+types['Kind'] = {
+    'star': {},
+    'nat': {},
+    'module': {},
+    'function': {
+        'arg_kinds': List('Kind'),
+        'return_kind': 'Kind',
+    },
+}
+
+types['Type'] = {
+    'boolean': {},
+    'void': {},
+    'ptr': {},
+    'array': {},
+    'opaque_ptr': {},
+    'opaque_number_type': {},
+    'number_type': {
+        'width': Int,
+        'signed': Boolean,
+    },
+    'type_application': {
+        'function': 'Type',
+        'args': List('Type'),
+    },
+    'nat_literal': {
+        'n': Int,
+    },
+    'struct_type': {
+        'module_name': Str,
+        'name': Str,
+        'type_args': List('Type'),
+        'fields': List(Tuple(Str, 'Type')),
+    },
+    'enum_type': {
+        'module_name': Str,
+        'name': Str,
+        'type_args': List('Type'),
+    },
+    'module_type': {
+        'name': Str,
+        'values': Dict(Str, 'Type'),
+        'types': Dict(Str, 'Type'),
+    },
+    'function_type': {
+        'calling_convention': Str,
+        'arg_types': List('Type'),
+        'return_type': 'Type',
+    },
+    'type_variable': {
+        'name': Str,
+    },
+}
+
+for fields in types['Type'].values():
+    fields['kind'] = 'Kind'
+
+del types['Expr']['field_access']
+types['Expr']['struct_field_access'] = {
+    'x': 'Expr',
+    'field': Str,
+}
+types['Expr']['module_field_access'] = {
+    'x': 'Expr',
+    'field': Str,
+}
+
+types['Decl']['enum']['type_params'] = List(Tuple(Str, 'Type'))
+types['Decl']['struct']['type_params'] = List(Tuple(Str, 'Type'))
+types['Decl']['function']['type_params'] = List(Tuple(Str, 'Type'))
+
+for n in ['Expr', 'LExpr', 'Pattern']:
+    for fields in types[n].values():
+        fields['ty'] = 'Type'
+
+TypedAST = Representation('TypedAST', types)
 
 star = Node('star')
 nat = Node('nat')
@@ -32,7 +113,7 @@ def tuple_type(n):
         Node(
             'tuple',
             n = n,
-            kind = function_kind([star] * self.n, star),
+            kind = function_kind([star] * n, star),
         )
 
 def nat_literal(n):
@@ -56,7 +137,7 @@ def type_apply(fn, args):
     arg_kinds = [arg.kind for arg in args]
     if fn_arg_kinds != arg_kinds:
         raise TypeError()
-    if fn.tag == 'lambda_tag':
+    if fn.tag == 'lambda_type':
         names = [name for name, _ in fn.args]
         substitutions = dict(zip(names, args))
         return substitute(fn.body, substitutions)
@@ -72,13 +153,14 @@ def type_apply(fn, args):
 def ptr_to(ty):
     return type_apply(ptr, [ty])
 
-def struct_type(module_name, name, type_args):
+def struct_type(module_name, name, type_args, fields):
     return \
         Node(
             'struct_type',
             module_name = module_name,
             name = name,
             type_args = type_args,
+            fields = fields,
             kind = star,
         )
 
@@ -183,19 +265,19 @@ def list_substitutable_for(args, expected):
 def is_ptr(x):
     if x == opaque_ptr:
         return True
-    if type(x) == Node and x.tag == 'type_application':
+    if x.tag == 'type_application':
         if x.function == ptr:
             return True
     return False
 
 def is_array(x):
-    if type(x) == Node and x.tag == 'type_application':
+    if x.tag == 'type_application':
         if x.function == array:
             return True
     return False
 
 def is_tuple(x):
-    if type(x) == Node and x.tag == 'type_application':
+    if x.tag == 'type_application':
         if x.function.tag == 'tuple':
             return True
     return False
@@ -325,7 +407,8 @@ class Environment:
                 self,
             )
 
-        struct_ty = struct_type(self.module_name, decl.name, type_args)
+        fields = []
+        struct_ty = struct_type(self.module_name, decl.name, type_args, fields)
         if len(type_param_kinds) > 0:
             self.type_bindings[decl.name] = \
                 lambda_type(
@@ -335,9 +418,9 @@ class Environment:
         else:
             self.type_bindings[decl.name] = struct_ty
 
-        fields = \
-            [(name, new_env.check_type(ty)) for name, ty in decl.fields]
-        struct_ty.fields = dict(fields)
+        fields.extend(
+            [(name, new_env.check_type(ty)) for name, ty in decl.fields],
+        )
 
         constructor_type = \
             function_type(
@@ -442,6 +525,7 @@ class Environment:
             args = self.check_expression_list(expr.args)
             arg_types = [arg.ty for arg in args]
             if function.ty.tag != 'function_type':
+                print(function.ty)
                 if function.ty.tag == 'lambda_type':
                     raise TypeError("Need to specify type args first")
                 else:
@@ -486,7 +570,8 @@ class Environment:
         elif expr.tag == 'field_access':
             x = self.check_expression(expr.x)
             if x.ty.tag == 'struct_type':
-                if not expr.field in x.ty.fields:
+                fields = dict(x.ty.fields)
+                if not expr.field in fields:
                     raise \
                         TypeError(
                             "No such field %s in struct %s from module %s" % (
@@ -500,7 +585,7 @@ class Environment:
                         'struct_field_access',
                         x = x,
                         field = expr.field,
-                        ty = x.ty.fields[expr.field],
+                        ty = fields[expr.field],
                     )
             elif x.ty.tag == 'module_type':
                 if not expr.field in x.ty.values:
@@ -524,7 +609,7 @@ class Environment:
         elif expr.tag == 'cast':
             to_cast = self.check_expression(expr.expr)
             from_ty = to_cast.ty
-            to_ty = self.check_type(expr.type)
+            to_ty = self.check_type(expr.ty)
             if to_ty.tag == 'number_type':
                 castable = \
                     from_ty.tag == 'number_type' or \
@@ -566,7 +651,7 @@ class Environment:
                 )
         elif expr.tag == 'apply_type_args':
             function = self.check_expression(expr.function)
-            if type(function.ty) != lambda_type:
+            if function.ty.tag != 'lambda_type':
                 raise \
                     TypeError(
                         'Expected %s to be a lambda_type' % function.ty
@@ -755,6 +840,7 @@ class Environment:
             ty = self.check_type(statement.ty)
             if expr:
                 if not substitutable_for(expr.ty, ty):
+                    print(expr.ty, ty)
                     raise TypeError()
                 if expr.ty != ty:
                     expr = \
@@ -858,7 +944,6 @@ class Environment:
                     Node(
                         'return',
                         expr = expr,
-                        ty = void,
                     )
                 new_env = self
             elif first_statement.tag == 'match':
@@ -1083,7 +1168,9 @@ class Environment:
         raise NotImplementedError()
 
     def check_top_level_decls(self, decls):
-        return [self.check_top_level_decl(decl) for decl in decls]
+        decls = [self.check_top_level_decl(decl) for decl in decls]
+        TypedAST.check(List('Decl'), decls)
+        return decls
 
 global_type_environment = {
     'void': void,

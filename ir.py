@@ -3,6 +3,9 @@ import itertools
 class Str:
     pass
 
+class Boolean:
+    pass
+
 class Int:
     pass
 
@@ -13,6 +16,11 @@ class Tuple:
 class List:
     def __init__(self, of):
         self.of = of
+
+class Dict:
+    def __init__(self, k, v):
+        self.k = k
+        self.v = v
 
 class OrNone:
     def __init__(self, ty):
@@ -29,9 +37,6 @@ class Node:
         for key, value in attributes.items():
             setattr(self, key, value)
 
-    def __repr__(self):
-        return "Node(%s, %s)" % (repr(self.tag), repr(self.attributes))
-
     def sorted_attribute_tuple(self):
         return tuple(sorted(self.attributes.items()))
 
@@ -41,38 +46,52 @@ class Node:
             self.tag == other.tag and \
             self.sorted_attribute_tuple() == other.sorted_attribute_tuple()
 
+    def __repr__(self):
+        return "Node(%s, %s)" % (self.tag, self.attributes)
+
 class Representation:
     def __init__(self, name, types):
         self.name = name
         self.types = types
 
-    def check(self, ty, data, path=None):
-        path = path or []
+    def check(self, ty, data, checked = None):
+        checked = checked or set()
+        if id(data) in checked:
+            return
+        checked.add(id(data))
         if ty == Str:
             assert isinstance(data, str)
+        elif ty == Boolean:
+            assert isinstance(data, bool)
         elif ty == Int:
             assert isinstance(data, int)
         elif isinstance(ty, Tuple):
             assert isinstance(data, tuple)
             assert len(ty.types) == len(data)
             for i, ty, value in zip(itertools.count(), ty.types, data):
-                path.append(('tuple', i))
-                self.check(ty, value, path)
-                path.pop()
+                self.check(ty, value, checked)
         elif isinstance(ty, List):
             assert isinstance(data, list)
             for i, x in enumerate(data):
-                path.append(('list', i))
-                self.check(ty.of, x, path)
-                path.pop()
+                self.check(ty.of, x, checked)
+        elif isinstance(ty, Dict):
+            assert isinstance(data, dict)
+            for k, v in data.items():
+                self.check(ty.k, k, checked)
+                self.check(ty.v, v, checked)
+        elif isinstance(ty, OrNone):
+            if data != None:
+                self.check(ty.ty, data, checked)
+        elif isinstance(ty, OneOf):
+            if data not in ty.alternatives:
+                raise Exception()
         elif ty in self.types:
-            assert isinstance(data, Node), repr((data, ty))
             tag = data.tag
             constructors = self.types[ty]
             if tag not in constructors:
                 raise \
                     Exception(
-                        'tag %s not in %s, %s' % (tag, ty, path)
+                        'tag %s not in %s' % (tag, ty)
                     )
             expected_attributes = constructors[tag]
             expected_keys = set(expected_attributes.keys())
@@ -82,20 +101,17 @@ class Representation:
             if missing or extra:
                 raise \
                     Exception(
-                        'missing %s, extra %s for %s' % (missing, extra, tag)
+                        'missing %s, extra %s for %s, %s' % (
+                            missing,
+                            extra,
+                            tag,
+                            ty
+                        )
                     )
             for key in expected_keys:
                 field_ty = expected_attributes[key]
-                value = data.attributes[key]
-                path.append(('field', key, tag))
-                self.check(field_ty, value, path)
-                path.pop()
-        elif isinstance(ty, OrNone):
-            if data != None:
-                self.check(ty.ty, data, path)
-        elif isinstance(ty, OneOf):
-            if data not in ty.alternatives:
-                raise Exception()
+                value = getattr(data, key)
+                self.check(field_ty, value, checked)
         else:
             print(ty)
             raise Exception('problem')
