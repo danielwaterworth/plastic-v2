@@ -15,7 +15,7 @@ types['Expr']['struct_field_access'] = {
     'field': Str,
 }
 types['Expr']['module_field_access'] = {
-    'x': 'Expr',
+    'module_name': Str,
     'field': Str,
 }
 
@@ -372,7 +372,7 @@ def expr(state, node):
             return \
                 Node(
                     'module_field_access',
-                    x = x,
+                    module_name = x.ty.name,
                     field = field,
                     ty = state.modules[x.ty.name].values[field],
                 )
