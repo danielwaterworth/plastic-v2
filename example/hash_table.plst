@@ -1,3 +1,78 @@
+trait
+  eq
+    <-
+      x: *,
+    functions
+      eq?
+        <-
+          x,
+          x,
+        ->
+          bool
+
+enum
+  ordering
+    constructors
+      lt(),
+      gt(),
+      eq(),
+
+trait
+  ord
+    <-
+      x: *,
+    <~
+      eq(x),
+    functions
+      lt?
+        <-
+          x,
+          x,
+        ->
+          ordering
+
+trait
+  hashable
+    <-
+      x: *,
+    <~
+      eq(x),
+    functions
+      hash
+        <-
+          x,
+        ->
+          u64
+
+implementation
+  eq
+    <-
+      u64,
+    functions
+      eq
+        <-
+          a: u64,
+          b: u64,
+        ->
+          bool
+        = {
+          return a == b;
+        }
+
+implementation
+  hashable
+    <-
+      u64,
+    functions
+      hash
+        <-
+          x: u64,
+        ->
+          u64
+        = {
+          return x;
+        }
+
 enum
   maybe
     @
@@ -11,7 +86,7 @@ struct
     @
       key: *,
       value: *,
-      n: nat,
+      n: u64,
     fields
       data: array(maybe((key, value)), n),
 
@@ -20,11 +95,24 @@ define
     @
       key: *,
       value: *,
-      n: nat,
+      n: u64,
+    <~
+      hashable(key),
     ->
       hashtable(key, value, n)
     = {
+      let n = reflect(n);
       let output: hashtable(key, value, n);
+      let i: u64 = 0;
+      loop {
+        if i >= n {
+          break;
+        }
+
+        output[i] = nothing@((key, value))();
+
+        i = i + 1;
+      }
       return output;
     }
 
@@ -33,7 +121,9 @@ define
     @
       key: *,
       value: *,
-      n: nat,
+      n: u64,
+    <~
+      hashable(key),
     <-
       table: ptr(hashtable(key, value, n)),
       key: key,
@@ -41,12 +131,134 @@ define
     ->
       bool
     = {
+      let n = reflect(n);
+      let h = hash(key);
+      let i: u64 = 0;
+      loop {
+        if (i > 10) {
+          break;
+        }
+
+        let slot = (h + i) % n;
+        match (*table).data[slot] {
+          just(_) {
+          }
+          nothing() {
+            (*table).data[slot] = just@((key, value))((key, value));
+            return true;
+          }
+        }
+
+        i = i + 1;
+      }
+      return false;
+    }
+
+define
+  lookup
+    @
+      key: *,
+      value: *,
+      n: u64,
+    <~
+      hashable(key),
+    <-
+      table: ptr(hashtable(key, value, n)),
+      key: key,
+    ->
+      maybe(value)
+    = {
+      let n = reflect(n);
+      let h = hash(key);
+      let i: u64 = 0;
+
+      loop {
+        if (i > 10) {
+          break;
+        }
+
+        let slot = (h + i) % n;
+        match (*table).data[slot] {
+          just((key1, value)) {
+            if eq?(key, key1) {
+              return just@(value)(value);
+            }
+          }
+          nothing() {
+            return nothing@(value)();
+          }
+        }
+
+        i = i + 1;
+      }
+
+      return nothing@(value)();
+    }
+
+define
+  delete
+    @
+      key: *,
+      value: *,
+      n: u64,
+    <~
+      hashable(key),
+    <-
+      table: ptr(hashtable(key, value, n)),
+      key: key,
+    ->
+      bool
+    = {
+      let n = reflect(n);
+      let h = hash(key);
+      let i: u64 = 0;
+
+      loop {
+        if (i > 10) {
+          break;
+        }
+
+        let slot = (h + i) % n;
+        match (*table).data[slot] {
+          just((key1, value)) {
+            if eq?(key, key1) {
+              (*table).data[slot] = nothing@((key, value))();
+              return true;
+            }
+          }
+          nothing() {
+            return false;
+          }
+        }
+
+        i = i + 1;
+      }
+
       return false;
     }
 
 define
   main
     = {
-      let h = empty@(i32, i32, 10)();
-      insert@(i32, i32, 10)(&h, 5, 5);
+      let h = empty@(u64, i32, 10)();
+      insert@(u64, i32, 10)(&h, 5, 5);
+      match lookup@(u64, i32, 10)(&h, 5) {
+        nothing() {
+          puts("whooops\00");
+          return void;
+        }
+        just(v) {
+          putint(v);
+        }
+      }
+      delete@(u64, i32, 10)(&h, 5);
+      match lookup@(u64, i32, 10)(&h, 5) {
+        nothing() {
+          puts("success\00");
+        }
+        just(v) {
+          puts("whooops\00");
+        }
+      }
+      return void;
     }

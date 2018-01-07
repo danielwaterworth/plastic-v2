@@ -11,7 +11,7 @@ class Token:
     def __repr__(self):
         return "Token(%s, %s)" % (repr(self.tag), repr(self.attributes))
 
-symbol_chars = '!<>+-=/|'
+symbol_chars = '!<>+-=/|~%'
 
 keywords = {
     'as',
@@ -23,13 +23,17 @@ keywords = {
     'enum',
     'extern',
     'fields',
+    'functions',
     'if',
+    'implementation',
     'import',
     'let',
     'loop',
     'match',
+    'reflect',
     'return',
     'struct',
+    'trait',
     'yield',
 }
 
@@ -95,12 +99,12 @@ class Lexer:
 
     def next_is_valid_identifier_char(self):
         next = self.next
-        return next.isalpha() or next.isdigit() or next in '_'
+        return next.isalpha() or next.isdigit() or next in '_?'
 
     def lex_identifier(self):
         pos = self.pos
         output = ""
-        if not self.next.isalpha():
+        if not self.next_is_valid_identifier_char():
             raise ParseError()
         output += self.next
         self.advance(1)
@@ -192,7 +196,7 @@ class Lexer:
                 self.tokens.append(self.lex_symbol())
             elif self.next.isdigit():
                 self.tokens.append(self.lex_number())
-            elif self.next.isalpha():
+            elif self.next_is_valid_identifier_char():
                 self.tokens.append(self.lex_identifier())
             else:
                 print(self.next)

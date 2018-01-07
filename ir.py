@@ -95,11 +95,7 @@ class Representation:
         self.name = name
         self.types = types
 
-    def check(self, ty, data, checked = None):
-        checked = checked or set()
-        if id(data) in checked:
-            return
-        checked.add(id(data))
+    def check(self, ty, data):
         if ty == Str:
             assert isinstance(data, str)
         elif ty == Boolean:
@@ -109,20 +105,20 @@ class Representation:
         elif isinstance(ty, Tuple):
             assert isinstance(data, tuple)
             assert len(ty.types) == len(data)
-            for i, ty, value in zip(itertools.count(), ty.types, data):
-                self.check(ty, value, checked)
+            for ty, value in zip(ty.types, data):
+                self.check(ty, value)
         elif isinstance(ty, List):
             assert isinstance(data, list)
-            for i, x in enumerate(data):
-                self.check(ty.of, x, checked)
+            for x in data:
+                self.check(ty.of, x)
         elif isinstance(ty, Dict):
             assert isinstance(data, dict)
             for k, v in data.items():
-                self.check(ty.k, k, checked)
-                self.check(ty.v, v, checked)
+                self.check(ty.k, k)
+                self.check(ty.v, v)
         elif isinstance(ty, OrNone):
             if data != None:
-                self.check(ty.ty, data, checked)
+                self.check(ty.ty, data)
         elif isinstance(ty, OneOf):
             if data not in ty.alternatives:
                 raise Exception()
@@ -153,7 +149,7 @@ class Representation:
             for key in expected_keys:
                 field_ty = expected_attributes[key]
                 value = getattr(data, key)
-                self.check(field_ty, value, checked)
+                self.check(field_ty, value)
         else:
             print(ty)
             raise Exception('problem')

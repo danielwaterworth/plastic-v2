@@ -19,6 +19,7 @@ binary_operators = [
     '/',
     '&',
     '|',
+    '%',
 ]
 
 AST = \
@@ -28,9 +29,10 @@ AST = \
             'Decl': {
                 'function': {
                     'name': Str,
-                    'return_type': 'Type',
                     'type_params': List(Tuple(Str, 'Kind')),
+                    'constraints': List('Type'),
                     'args': List(Tuple(Str, 'Type')),
+                    'return_type': 'Type',
                     'body': List('Statement'),
                 },
                 'struct': {
@@ -55,6 +57,17 @@ AST = \
                 'import': {
                     'module': Str,
                 },
+                'implementation': {
+                    'name': Str,
+                    'tys': List('Type'),
+                    'functions': List('Decl'),
+                },
+                'trait': {
+                    'name': Str,
+                    'args': List(Tuple(Str, 'Kind')),
+                    'constraints': List('Type'),
+                    'functions': List(Tuple(Str, List('Type'), 'Type')),
+                },
             },
             'LExpr': {
                 'variable': {
@@ -64,6 +77,13 @@ AST = \
                     'l_expr': 'LExpr',
                     'index': 'Expr',
                 },
+                'field_access': {
+                    'l_expr': 'LExpr',
+                    'field': Str,
+                },
+                'deref': {
+                    'expr': 'Expr',
+                }
             },
             'Expr': {
                 'variable': {
@@ -119,6 +139,12 @@ AST = \
                 'deref': {
                     'expr': 'Expr',
                 },
+                'tuple': {
+                    'values': List('Expr'),
+                },
+                'reflect': {
+                    'ty': 'Type',
+                }
             },
             'Type': {
                 'named_type': {
@@ -147,6 +173,9 @@ AST = \
                 'wildcard': {
                     'name': Str,
                 },
+                'tuple': {
+                    'patterns': List('Pattern'),
+                }
             },
             'Statement': {
                 'match': {
@@ -186,6 +215,8 @@ AST = \
             },
         },
     )
+
+void = Node('named_type', name = 'void')
 
 class ParseError(Exception):
     pass
@@ -412,6 +443,12 @@ class Parser:
             name = self.next.name
             self.advance()
             return Node('variable', name = name)
+        elif self.next.tag == 'keyword' and self.next.keyword == 'reflect':
+            self.advance()
+            self.expect('open_paren')
+            ty = self.parse_type()
+            self.expect('close_paren')
+            return Node('reflect', ty = ty)
         else:
             n = self.parse_number()
             return Node('number_literal', n = n)
@@ -491,17 +528,42 @@ class Parser:
                 self.advance()
                 other = self.parse_expression_4()
                 expr = \
-                    Node('binary_operator', operator = '*', a = expr, b = other)
+                    Node(
+                        'binary_operator',
+                        operator = '*',
+                        a = expr,
+                        b = other
+                    )
             elif self.next.tag == 'symbol' and self.next.symbol == '/':
                 self.advance()
                 other = self.parse_expression_4()
                 expr = \
-                    Node('binary_operator', operator = '/', a = expr, b = other)
+                    Node(
+                        'binary_operator',
+                        operator = '/',
+                        a = expr,
+                        b = other
+                    )
+            elif self.next.tag == 'symbol' and self.next.symbol == '%':
+                self.advance()
+                other = self.parse_expression_4()
+                expr = \
+                    Node(
+                        'binary_operator',
+                        operator = '%',
+                        a = expr,
+                        b = other
+                    )
             elif self.next.tag == 'ampersand':
                 self.advance()
                 other = self.parse_expression_4()
                 expr = \
-                    Node('binary_operator', operator = '&', a = expr, b = other)
+                    Node(
+                        'binary_operator',
+                        operator = '&',
+                        a = expr,
+                        b = other
+                    )
             else:
                 break
         return expr
@@ -562,30 +624,51 @@ class Parser:
         return self.parse_expression_7()
 
     def parse_pattern(self):
-        name = self.parse_identifier()
-        if self.next.tag == 'open_paren':
-            self.advance()
-            args = []
-            if self.next.tag != 'close_paren':
-                match = self.parse_pattern()
-                args.append(match)
-                while self.next.tag != 'close_paren':
-                    self.expect('comma')
+        if self.next.tag == 'identifier':
+            name = self.parse_identifier()
+            if self.next.tag == 'open_paren':
+                self.advance()
+                args = []
+                if self.next.tag != 'close_paren':
                     match = self.parse_pattern()
                     args.append(match)
-            self.expect('close_paren')
+                    while self.next.tag != 'close_paren':
+                        self.expect('comma')
+                        match = self.parse_pattern()
+                        args.append(match)
+                self.expect('close_paren')
+                return \
+                    Node(
+                        'constructor',
+                        name = name,
+                        args = args,
+                    )
+            else:
+                return \
+                    Node(
+                        'wildcard',
+                        name = name,
+                    )
+        elif self.next.tag == 'open_paren':
+            self.advance()
+            patterns = []
+            if self.next.tag == 'close_paren':
+                self.advance()
+            else:
+                while True:
+                    patterns.append(self.parse_pattern()),
+                    if self.next.tag == 'comma':
+                        self.advance()
+                    else:
+                        self.expect('close_paren')
+                        break
             return \
                 Node(
-                    'constructor',
-                    name = name,
-                    args = args,
+                    'tuple',
+                    patterns = patterns,
                 )
         else:
-            return \
-                Node(
-                    'wildcard',
-                    name = name,
-                )
+            raise ParseError(self.next.pos)
 
     def parse_let_statement(self):
         self.expect_keyword('let')
@@ -766,8 +849,9 @@ class Parser:
     def parse_function(self):
         name = self.parse_identifier()
         type_params = []
+        constraints = []
         args = []
-        return_type = Node('named_type', name = 'void')
+        return_type = void
         body = None
 
         if self.next.tag == 'at':
@@ -779,8 +863,14 @@ class Parser:
                 self.expect('comma')
                 type_params.append((field_name, kind))
 
-        symbol = self.parse_symbol()
-        if symbol == "<-":
+        if self.next.tag == 'symbol' and self.next.symbol == "<~":
+            self.advance()
+            while self.next.tag != 'symbol':
+                constraints.append(self.parse_type())
+                self.expect('comma')
+
+        if self.next.tag == 'symbol' and self.next.symbol == "<-":
+            self.advance()
             while self.next.tag == 'identifier':
                 arg_name = self.next.name
                 self.advance()
@@ -788,15 +878,12 @@ class Parser:
                 arg_type = self.parse_type()
                 self.expect('comma')
                 args.append((arg_name, arg_type))
-            symbol = self.parse_symbol()
 
-        if symbol == "->":
+        if self.next.tag == 'symbol' and self.next.symbol == "->":
+            self.advance()
             return_type = self.parse_type()
-            symbol = self.parse_symbol()
 
-        if symbol != '=':
-            raise ParseError('function with no body')
-
+        self.expect_symbol('=')
         self.expect('open_brace')
 
         body = self.parse_body()
@@ -806,6 +893,7 @@ class Parser:
                 'function',
                 name = name,
                 type_params = type_params,
+                constraints = constraints,
                 args = args,
                 return_type = return_type,
                 body = body,
@@ -815,7 +903,7 @@ class Parser:
         name = self.parse_identifier()
 
         arg_types = []
-        return_type = Node('void')
+        return_type = void
 
         if self.next.tag == 'symbol':
             symbol = self.parse_symbol()
@@ -871,6 +959,75 @@ class Parser:
                 module = module,
             )
 
+    def parse_trait(self):
+        trait_name = self.parse_identifier()
+        self.expect_symbol('<-')
+        args = []
+        constraints = []
+        functions = []
+        while self.next.tag == 'identifier':
+            name = self.parse_identifier()
+            self.expect('colon')
+            kind = self.parse_kind()
+            self.expect('comma')
+            args.append((name, kind))
+
+        if self.next.tag == 'symbol' and self.next.symbol == '<~':
+            self.advance()
+            while self.next.tag != 'keyword':
+                constraints.append(self.parse_type())
+                self.expect('comma')
+
+        self.expect_keyword('functions')
+        while self.next.tag == 'identifier':
+            name = self.parse_identifier()
+            function_args = []
+            function_return_type = void
+            if self.next.tag == 'symbol' and self.next.symbol == '<-':
+                self.advance()
+                while self.next.tag == 'identifier':
+                    ty = self.parse_type()
+                    self.expect('comma')
+                    function_args.append(ty)
+            if self.next.tag == 'symbol' and self.next.symbol == '->':
+                self.advance()
+                function_return_type = self.parse_type()
+            functions.append((name, function_args, function_return_type))
+        return \
+            Node(
+                'trait',
+                name = trait_name,
+                args = args,
+                constraints = constraints,
+                functions = functions,
+            )
+
+    def parse_implementation(self):
+        name = self.parse_identifier()
+
+        self.expect_symbol('<-')
+
+        tys = []
+
+        while self.next.tag != 'keyword':
+            tys.append(self.parse_type())
+            self.expect('comma')
+
+        self.expect_keyword('functions')
+
+        functions = []
+
+        while self.next.tag == 'identifier':
+            functions.append(self.parse_function())
+
+        return \
+            Node(
+                'implementation',
+                name = name,
+                tys = tys,
+                functions = functions,
+            )
+
     def parse_top_level_decl(self):
         type = self.parse_keyword()
         if type == 'enum':
@@ -885,6 +1042,10 @@ class Parser:
             return self.parse_constant()
         elif type == 'import':
             return self.parse_import()
+        elif type == 'trait':
+            return self.parse_trait()
+        elif type == 'implementation':
+            return self.parse_implementation()
         else:
             raise ParseError('unknown top-level entity: %s' % type)
 

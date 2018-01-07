@@ -202,6 +202,7 @@ def expr(state, node):
                 'function',
                 name = node.name,
                 type_params = node.type_params,
+                constraints = node.constraints,
                 args = node.args,
                 return_type = node.return_type,
                 body = body,
