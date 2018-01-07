@@ -11,29 +11,28 @@ def parse(src):
     tokens = lexer.Lexer(src).lex()
     return plst_parser.Parser(tokens).parse_file()
 
+def map_modules(f, modules):
+    return \
+        [(module_name, f(decls))
+            for module_name, decls in modules]
+
+def apply_module_pass(f, modules):
+    output = []
+    output_dict = {}
+    for module_name, decls in modules:
+        module, module_interface = \
+            f(module_name, output_dict, decls)
+        output_dict[module_name] = module_interface
+        output.append((module_name, module))
+    return output
+
 def main():
     checked_module_interfaces = {}
     checked_decls = {}
     modules = importer.Importer(parse).load_all(sys.argv[1])
 
-    sort_checked = \
-        [(module_name, sort_checker.sort_check(decls))
-            for module_name, decls in modules]
-
-    kind_checked = []
-    modules = {}
-    for module_name, decls in sort_checked:
-        module, module_interface = \
-            kind_checker.kind_check(module_name, modules, decls)
-        modules[module_name] = module_interface
-        kind_checked.append((module_name, module))
-
-    type_checked = []
-    modules = {}
-    for module_name, decls in kind_checked:
-        module, module_interface = \
-            type_checker.type_check(module_name, modules, decls)
-        modules[module_name] = module_interface
-        type_checked.append((module_name, module))
+    modules = map_modules(sort_checker.sort_check, modules)
+    modules = apply_module_pass(kind_checker.kind_check, modules)
+    modules = apply_module_pass(type_checker.type_check, modules)
 
 main()
