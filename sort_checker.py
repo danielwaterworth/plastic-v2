@@ -9,7 +9,7 @@ types = copy.deepcopy(plst_parser.AST.types)
 
 types['Kind'] = {
     'star': {},
-    'u64': {},
+    'nat': {},
 }
 
 SortAST = Representation('SortAST', types)
@@ -19,8 +19,8 @@ transformer = plst_parser.AST.transformer(SortAST)
 @transformer.case('Kind')
 def kind(_, node):
     if node.tag == 'named_kind':
-        if node.name == 'u64':
-            return Node('u64')
+        if node.name == 'nat':
+            return Node('nat')
         else:
             raise SortError()
     elif node.tag == 'star':

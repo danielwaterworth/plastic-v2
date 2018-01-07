@@ -78,6 +78,12 @@ def is_ptr(x):
             return True
     return False
 
+def is_tuple(x):
+    if x.tag == 'type_application':
+        if x.function.tag == 'tuple':
+            return True
+    return False
+
 def is_array(x):
     if x.tag == 'type_application':
         if x.function == array:
@@ -241,6 +247,12 @@ def statement(state, node):
         if expr and ty:
             expr = implicit_cast(expr, ty)
         state.env[node.name] = ty or expr.ty
+        return Node(
+            'let_statement',
+            name = node.name,
+            ty = ty or expr.ty,
+            expr = expr,
+        )
     elif node.tag == 'if_statement':
         condition = transformer.transform('Expr', state, node.condition)
         if condition.ty != boolean:
@@ -529,7 +541,7 @@ def lexpr(state, node):
         return \
             Node(
                 'array_access',
-                node = root,
+                l_expr = root,
                 index = index,
                 ty = root.ty.args[0],
             )

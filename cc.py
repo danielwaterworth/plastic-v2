@@ -35,4 +35,10 @@ def main():
     modules = apply_module_pass(kind_checker.kind_check, modules)
     modules = apply_module_pass(type_checker.type_check, modules)
 
+    raise NotImplementedError()
+
+    with open(sys.argv[2], 'w') as fd:
+        writer = output.LLVMWriter(fd)
+        writer.writeout_prelude()
+        writer.writeout_decls(cg_decls)
 main()
