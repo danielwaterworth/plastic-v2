@@ -177,8 +177,6 @@ def expr(state, node):
                 type_params = node.type_params,
             )
     elif node.tag == 'function':
-        assert not node.consume_type
-        assert not node.product_type
         fn_type = \
             function_type(
                 'plastic',
@@ -206,8 +204,6 @@ def expr(state, node):
                 type_params = node.type_params,
                 args = node.args,
                 return_type = node.return_type,
-                product_type = node.product_type,
-                consume_type = node.consume_type,
                 body = body,
             )
     elif node.tag == 'constant':

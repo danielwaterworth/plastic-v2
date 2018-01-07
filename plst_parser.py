@@ -28,8 +28,6 @@ AST = \
             'Decl': {
                 'function': {
                     'name': Str,
-                    'product_type': OrNone('Type'),
-                    'consume_type': OrNone('Type'),
                     'return_type': 'Type',
                     'type_params': List(Tuple(Str, 'Kind')),
                     'args': List(Tuple(Str, 'Type')),
@@ -769,8 +767,6 @@ class Parser:
         name = self.parse_identifier()
         type_params = []
         args = []
-        product_type = None
-        consume_type = None
         return_type = Node('named_type', name = 'void')
         body = None
 
@@ -794,14 +790,6 @@ class Parser:
                 args.append((arg_name, arg_type))
             symbol = self.parse_symbol()
 
-        if symbol == '<=':
-            consume_type = self.parse_type()
-            symbol = self.parse_symbol()
-
-        if symbol == '=>':
-            product_type = self.parse_type()
-            symbol = self.parse_symbol()
-
         if symbol == "->":
             return_type = self.parse_type()
             symbol = self.parse_symbol()
@@ -819,8 +807,6 @@ class Parser:
                 name = name,
                 type_params = type_params,
                 args = args,
-                product_type = product_type,
-                consume_type = consume_type,
                 return_type = return_type,
                 body = body,
             )
