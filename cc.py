@@ -5,7 +5,7 @@ import lexer
 import plst_parser
 import sort_checker
 import kind_checker
-import type_checker_new as type_checker
+import type_checker
 
 def parse(src):
     tokens = lexer.Lexer(src).lex()
