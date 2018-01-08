@@ -58,7 +58,7 @@ AST = \
                     'module': Str,
                 },
                 'implementation': {
-                    'name': Str,
+                    'trait': 'Type',
                     'tys': List('Type'),
                     'functions': List('Decl'),
                 },
@@ -1003,7 +1003,7 @@ class Parser:
             )
 
     def parse_implementation(self):
-        name = self.parse_identifier()
+        trait = self.parse_type()
 
         self.expect_symbol('<-')
 
@@ -1017,13 +1017,13 @@ class Parser:
 
         functions = []
 
-        while self.next.tag == 'identifier':
+        while not self.eof() and self.next.tag == 'identifier':
             functions.append(self.parse_function())
 
         return \
             Node(
                 'implementation',
-                name = name,
+                trait = trait,
                 tys = tys,
                 functions = functions,
             )

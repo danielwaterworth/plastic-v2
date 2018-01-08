@@ -55,6 +55,11 @@ types['Type'] = {
     'type_variable': {
         'name': Str,
     },
+    'trait': {
+        'module_name': Str,
+        'name': Str,
+
+    }
 }
 
 for constructor in types['Type'].values():
@@ -65,6 +70,8 @@ types['Kind']['function'] = {
     'return_kind': 'Kind',
 }
 types['Kind']['module'] = {}
+
+types['Kind']['constraint'] = {}
 
 KindAST = Representation('KindAST', types)
 
@@ -270,7 +277,6 @@ def ty(state, node):
     elif node.tag == 'trait':
         assert len(node.constraints) == 0
         args = node.args
-        pprint(args)
         tys = {}
         for arg, kind in args:
             tys[arg] = type_variable(arg, kind)
@@ -279,8 +285,24 @@ def ty(state, node):
                 tys,
                 state.env,
             )
-        functions = transformer.default_transform(List(Tuple(Str, List('Type'), 'Type')), state, node.functions)
+        functions = transformer.transform(List(Tuple(Str, List('Type'), 'Type')), state, node.functions)
+        function_dict = {}
+        for (name, types, return_type) in functions:
+            if name in function_dict:
+                raise KindError()
+            function_dict[name] = (types, return_type)
         state.env = state.env.parent
+        state.traits[node.name] = SimpleNamespace(
+            constraints = node.constraints,
+            args = node.args,
+            functions = function_dict,
+        )
+        state.env[node.name] = Node(
+            'trait',
+            module_name = state.module_name,
+            name = node.name,
+            kind = function_kind([kind for _, kind in args], Node('constraint')),
+        )
         return Node(
             'trait',
             name = node.name,
@@ -288,6 +310,52 @@ def ty(state, node):
             args = node.args,
             functions = functions,
         )
+    elif node.tag == 'implementation':
+        trait = transformer.transform('Type', state, node.trait)
+        if trait.kind.tag != 'function' and trait.kind.return_kind.tag != 'constraint':
+            raise KindError()
+        tys = transformer.transform(List('Type'), state, node.tys)
+        trait_info = state.traits[trait.name]
+        if len(tys) != len(trait_info.args):
+            raise KindError()
+        substitutions = {}
+        for arg, (name, kind) in zip(tys, trait_info.args):
+            if arg.kind != kind:
+                raise KindError()
+            substitutions[name] = arg
+        functions = []
+        for function in node.functions:
+            assert function.tag == 'function'
+            arg_types, return_type = trait_info.functions[function.name]
+            if len(arg_types) != len(function.args):
+                raise KindError()
+            args = transformer.transform(List(Tuple(Str, 'Type')), state, function.args)
+            for expected_type, (name, actual_type) in zip(arg_types, args):
+                if substitute(expected_type, substitutions) != actual_type:
+                    raise KindError()
+            ret = transformer.transform('Type', state, function.return_type)
+            if substitute(return_type, substitutions) != ret:
+                raise KindError()
+            assert len(function.type_params) == 0
+            assert len(function.constraints) == 0
+            body = transformer.transform(List('Statement'), state, function.body)
+            functions.append(Node(
+                'function',
+                type_params = [],
+                constraints = [],
+                args = args,
+                return_type = ret,
+                name = function.name,
+                body = body,
+            ))
+        pprint(trait)
+        return Node(
+            'implementation',
+            trait = trait,
+            tys = tys,
+            functions = functions,
+        )
+        raise NotImplementedError()
     return transformer.default_transform('Decl', state, node)
 
 @transformer.case('Type')
@@ -333,6 +401,7 @@ def kind_check(module_name, modules, decls):
             module_name = module_name,
             modules = modules,
             env = env,
+            traits = {},
         )
     decls = \
         transformer.transform(

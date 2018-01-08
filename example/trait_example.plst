@@ -9,3 +9,18 @@ trait
           x,
         ->
           bool
+
+implementation
+  eq
+    <-
+      u64,
+    functions
+      eq?
+        <-
+          a: u64,
+          b: u64,
+        ->
+          bool
+        = {
+          return a == b;
+        }
