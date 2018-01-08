@@ -1,0 +1,11 @@
+trait
+  eq
+    <-
+      x: *,
+    functions
+      eq?
+        <-
+          x,
+          x,
+        ->
+          bool

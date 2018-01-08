@@ -267,6 +267,27 @@ def ty(state, node):
         return output
     elif node.tag == 'import':
         state.env[node.module] = module_type(node.module)
+    elif node.tag == 'trait':
+        assert len(node.constraints) == 0
+        args = node.args
+        pprint(args)
+        tys = {}
+        for arg, kind in args:
+            tys[arg] = type_variable(arg, kind)
+        state.env = \
+            Environment(
+                tys,
+                state.env,
+            )
+        functions = transformer.default_transform(List(Tuple(Str, List('Type'), 'Type')), state, node.functions)
+        state.env = state.env.parent
+        return Node(
+            'trait',
+            name = node.name,
+            constraints = node.constraints,
+            args = node.args,
+            functions = functions,
+        )
     return transformer.default_transform('Decl', state, node)
 
 @transformer.case('Type')

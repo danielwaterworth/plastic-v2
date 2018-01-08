@@ -979,7 +979,7 @@ class Parser:
                 self.expect('comma')
 
         self.expect_keyword('functions')
-        while self.next.tag == 'identifier':
+        while not self.eof() and self.next.tag == 'identifier':
             name = self.parse_identifier()
             function_args = []
             function_return_type = void

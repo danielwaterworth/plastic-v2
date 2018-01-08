@@ -49,7 +49,7 @@ implementation
     <-
       u64,
     functions
-      eq
+      eq?
         <-
           a: u64,
           b: u64,
