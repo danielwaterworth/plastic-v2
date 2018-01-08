@@ -277,3 +277,9 @@ def pprint(value):
     output = []
     pretty(value, 0, output)
     print(''.join(output))
+
+def define_constructor(tag, fields):
+    def constructor(*args):
+        assert len(args) == len(fields)
+        return Node(tag, **dict(zip(fields, args)))
+    return constructor

@@ -1,10 +1,12 @@
 from ir import *
+import itertools
 
 class FunctionWriter:
     def __init__(self, code_generator):
         self.current_basic_block = None
         self.basic_blocks = []
-        self.variable_names = map(lambda i: "%%var.%d" % i, itertools.count())
+        self.variable_names = \
+            map(lambda i: "%%var.%d" % i, itertools.count())
         self.block_names = map(lambda i: "block.%d" % i, itertools.count())
         self.new_basic_block()
 

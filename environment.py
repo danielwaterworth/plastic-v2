@@ -3,10 +3,18 @@ class Environment:
         self.attributes = attributes
         self.parent = parent
 
+    def get(self, key, default):
+        if key in self.attributes:
+            return self.attributes.get(key, default)
+        elif self.parent:
+            return self.parent.get(key, default)
+        else:
+            return default
+
     def __getitem__(self, key):
         if key in self.attributes:
             return self.attributes[key]
-        if self.parent:
+        elif self.parent:
             return self.parent[key]
         else:
             raise KeyError(key)
