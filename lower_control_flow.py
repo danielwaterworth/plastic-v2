@@ -92,8 +92,7 @@ transformer = type_checker.TypeAST.transformer(LowerControl)
 @transformer.case('Statement')
 def statement(state, node):
     if node.tag == 'return':
-        expr = transformer.transform('Expr', state, node.expr)
-        state.current_ebb.terminator = return_(expr)
+        state.current_ebb.terminator = return_(node.expr)
         state.current_ebb_name = None
     elif node.tag == 'break':
         state.current_ebb.terminator = jump(state.break_blocks[-1])
@@ -104,9 +103,8 @@ def statement(state, node):
         false_block = state.new_ebb()
         after_block = state.new_ebb()
 
-        condition = transformer.transform('Expr', state, node.condition)
         state.ebbs[before_block].terminator = \
-            conditional(condition, true_block, false_block)
+            conditional(node.condition, true_block, false_block)
 
         state.current_ebb_name = true_block
         transformer.transform(List('Statement'), state, node.true_side)
@@ -131,7 +129,6 @@ def statement(state, node):
         state.current_ebb.terminator = jump(start_block)
         state.current_ebb_name = after_block
     elif node.tag == 'match':
-        expr = transformer.transform('Expr', state, node.expr)
         cases = []
         state.current_ebb.terminator = match(expr, cases)
         raise NotImplementedError()
@@ -164,7 +161,5 @@ def transform_decl(node):
     else:
         return node
 
-def lower_control_flow(decls):
-    decls = [transform_decl(decl) for decl in decls]
-    LowerControl.check(List('Decl'), decls)
-    return decls
+def lower_control_flow(things):
+    raise NotImplementedError()

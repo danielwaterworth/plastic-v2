@@ -7,6 +7,7 @@ import sort_checker
 import kind_checker
 import type_checker
 import lower_control_flow
+import reorganize
 
 def parse(src):
     tokens = lexer.Lexer(src).lex()
@@ -35,7 +36,8 @@ def main():
     modules = map_modules(sort_checker.sort_check, modules)
     modules = apply_module_pass(kind_checker.kind_check, modules)
     modules = apply_module_pass(type_checker.type_check, modules)
-    modules = map_modules(lower_control_flow.lower_control_flow, modules)
+    things = reorganize.reorganize(modules)
+    things = lower_control_flow.lower_control_flow(things)
 
     raise NotImplementedError()
 
