@@ -70,6 +70,7 @@ class ControlFlowState:
         self.first_ebb_name = None
         self.ebbs = {}
         self.ebb_names = map(lambda x: "ebb.%d" % x, itertools.count())
+        self.break_blocks = []
 
     @property
     def current_ebb(self):
@@ -95,7 +96,7 @@ def statement(state, node):
         state.current_ebb.terminator = return_(expr)
         state.current_ebb_name = None
     elif node.tag == 'break':
-        raise NotImplementedError()
+        state.current_ebb.terminator = jump(state.break_blocks[-1])
         state.current_ebb_name = None
     elif node.tag == 'if_statement':
         before_block = state.current_ebb_name
@@ -122,9 +123,11 @@ def statement(state, node):
         before_block = state.current_ebb_name
         start_block = state.new_ebb()
         after_block = state.new_ebb()
+        state.break_blocks.append(after_block)
         state.ebbs[before_block].terminator = jump(start_block)
         state.current_ebb_name = start_block
         transformer.transform(List('Statement'), state, node.body)
+        state.break_blocks.pop()
         state.current_ebb.terminator = jump(start_block)
         state.current_ebb_name = after_block
     elif node.tag == 'match':
