@@ -3,25 +3,38 @@ from kind_checker import *
 from environment import Environment
 from types import SimpleNamespace
 import copy
+import itertools
 
 class NotImplementedError(Exception):
     pass
 
 types = copy.deepcopy(KindAST.types)
 
-del types['Expr']['field_access']
-types['Expr']['struct_field_access'] = {
-    'x': 'Expr',
-    'field': Str,
-}
-types['Expr']['module_field_access'] = {
-    'module_name': Str,
-    'field': Str,
-}
+for expr in ['Expr', 'LExpr']:
+    del types[expr]['variable']
+    types[expr]['primitive'] = {
+        'name': Str,
+    }
+    types[expr]['global'] = {
+        'module_name': Str,
+        'name': Str,
+    }
+    types[expr]['local'] = {
+        'i': Int,
+    }
+    types[expr]['arg'] = {
+        'name': Str,
+    }
+    types[expr]['matched_variable'] = {
+        'name': Str,
+    }
 
 for n in ['Expr', 'LExpr', 'Pattern']:
     for fields in types[n].values():
         fields['ty'] = 'Type'
+
+del types['Statement']['let_statement']['name']
+types['Statement']['let_statement']['num'] = Int
 
 TypeAST = Representation('TypeAST', types)
 
@@ -152,15 +165,21 @@ def implicit_cast_list(exprs, tys):
 transformer = KindAST.transformer(TypeAST)
 
 @transformer.case('Decl')
-def expr(state, node):
+def decl(state, node):
     if node.tag == 'struct':
         ty_vars = make_ty_vars(node.type_params)
         state.env[node.name] = \
-            struct_constructor_type(
-                state.module_name,
-                node.name,
-                [arg for _, arg in ty_vars],
-                [ty for _, ty in node.fields],
+            Node(
+                'global',
+                module_name = state.module_name,
+                name = node.name,
+                ty = \
+                    struct_constructor_type(
+                        state.module_name,
+                        node.name,
+                        [arg for _, arg in ty_vars],
+                        [ty for _, ty in node.fields],
+                    ),
             )
         state.structs[node.name] = \
             SimpleNamespace(
@@ -171,11 +190,17 @@ def expr(state, node):
         ty_vars = make_ty_vars(node.type_params)
         for name, tys in node.constructors:
             state.env[name] = \
-                enum_constructor_type(
-                    state.module_name,
-                    node.name,
-                    [arg for _, arg in ty_vars],
-                    tys,
+                Node(
+                    'global',
+                    module_name = state.module_name,
+                    name = node.name,
+                    ty = \
+                        enum_constructor_type(
+                            state.module_name,
+                            node.name,
+                            [arg for _, arg in ty_vars],
+                            tys,
+                        ),
                 )
         state.enums[node.name] = \
             SimpleNamespace(
@@ -195,14 +220,24 @@ def expr(state, node):
                     node.type_params,
                     fn_type,
                 )
-        state.env[node.name] = fn_type
         env = state.env
-        state.env = Environment(dict(node.args), env)
+        args = {}
+        for name, ty in node.args:
+            args[name] = Node('arg', name = name, ty = ty)
+        state.env = Environment(args, env)
         state.return_type = node.return_type
+        state.var_nums = itertools.count()
         body = \
             transformer.default_transform(List('Statement'), state, node.body)
         del state.return_type
         state.env = env
+        state.env[node.name] = \
+            Node(
+                'global',
+                module_name = state.module_name,
+                name = node.name,
+                ty = fn_type,
+            )
         return \
             Node(
                 'function',
@@ -215,7 +250,13 @@ def expr(state, node):
             )
     elif node.tag == 'constant':
         expr = transformer.transform('Expr', state, node.expr)
-        state.env[node.name] = expr.ty
+        state.env[node.name] = \
+            Node(
+                'global',
+                module_name = state.module_name,
+                name = node.name,
+                ty = expr.ty,
+            )
         return \
             Node(
                 'constant',
@@ -226,7 +267,12 @@ def expr(state, node):
         arg_types = transformer.transform(List('Type'), state, node.arg_types)
         return_type = transformer.transform('Type', state, node.return_type)
         state.env[node.name] = \
-            function_type('c', arg_types, return_type)
+            Node(
+                'global',
+                module_name = state.module_name,
+                name = node.name,
+                ty = function_type('c', arg_types, return_type),
+            )
         return \
             Node(
                 'extern',
@@ -236,7 +282,11 @@ def expr(state, node):
             )
     elif node.tag == 'import':
         state.env[node.module] = \
-            module_type(node.module)
+            Node(
+                'module',
+                name = node.module,
+                ty = module_type(node.module),
+            )
     return transformer.default_transform('Decl', state, node)
 
 @transformer.case('Statement')
@@ -246,10 +296,16 @@ def statement(state, node):
         ty = transformer.transform(OrNone('Type'), state, node.ty)
         if expr and ty:
             expr = implicit_cast(expr, ty)
-        state.env[node.name] = ty or expr.ty
+        var_num = next(state.var_nums)
+        state.env[node.name] = \
+            Node(
+                'local',
+                i = var_num,
+                ty = ty or expr.ty,
+            )
         return Node(
             'let_statement',
-            name = node.name,
+            num = var_num,
             ty = ty or expr.ty,
             expr = expr,
         )
@@ -342,12 +398,7 @@ def lookup_struct(state, module_name, name, type_args):
 @transformer.case('Expr')
 def expr(state, node):
     if node.tag == 'variable':
-        return \
-            Node(
-                'variable',
-                name = node.name,
-                ty = state.env[node.name],
-            )
+        return state.env[node.name]
     elif node.tag == 'application':
         function = transformer.transform('Expr', state, node.function)
         args = transformer.transform(List('Expr'), state, node.args)
@@ -378,13 +429,7 @@ def expr(state, node):
         x = transformer.transform('Expr', state, node.x)
         field = node.field
         if x.ty.tag == 'module_type':
-            return \
-                Node(
-                    'module_field_access',
-                    module_name = x.ty.name,
-                    field = field,
-                    ty = state.modules[x.ty.name].values[field],
-                )
+            return state.modules[x.ty.name].values[field]
         elif x.ty.tag == 'struct_type':
             struct = \
                 lookup_struct(
@@ -395,7 +440,7 @@ def expr(state, node):
                 )
             return \
                 Node(
-                    'struct_field_access',
+                    'field_access',
                     x = x,
                     field = field,
                     ty = struct.fields[field],
@@ -520,13 +565,7 @@ def expr(state, node):
 @transformer.case('LExpr')
 def lexpr(state, node):
     if node.tag == 'variable':
-        ty = state.env[node.name]
-        return \
-            Node(
-                'variable',
-                name = node.name,
-                ty = ty,
-            )
+        return state.env[node.name]
     elif node.tag == 'array_access':
         root, index = \
             transformer.transform(
@@ -551,7 +590,12 @@ def lexpr(state, node):
 @transformer.case('Pattern')
 def pattern(state, node):
     if node.tag == 'wildcard':
-        state.env[node.name] = state.current_ty
+        state.env[node.name] = \
+            Node(
+                'matched_variable',
+                name = node.name,
+                ty = state.current_ty,
+            )
         return \
             Node(
                 'wildcard',
@@ -586,13 +630,15 @@ def pattern(state, node):
     else:
         raise NotImplementedError()
 
+primitive = define_constructor('primitive', ['name', 'ty'])
+
 def type_check(module_name, modules, decls):
     initial_env = \
         Environment({
-            'null': opaque_ptr,
-            'void': void,
-            'true': boolean,
-            'false': boolean,
+            'null': primitive('null', opaque_ptr),
+            'void': primitive('void', void),
+            'true': primitive('true', boolean),
+            'false': primitive('false', boolean),
         })
     env = Environment({}, initial_env)
     structs = {}

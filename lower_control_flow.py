@@ -1,8 +1,8 @@
 from ir import *
 import type_checker
 import copy
-from environment import Environment
 from types import SimpleNamespace
+import itertools
 
 types = copy.deepcopy(type_checker.TypeAST.types)
 
@@ -70,8 +70,6 @@ class ControlFlowState:
         self.first_ebb_name = None
         self.ebbs = {}
         self.ebb_names = map(lambda x: "ebb.%d" % x, itertools.count())
-        self.var_names = map(lambda x: "var.%d" % x, itertools.count())
-        self.env = Environment(dict(zip(arg_names, arg_names)))
 
     @property
     def current_ebb(self):
@@ -90,18 +88,6 @@ class ControlFlowState:
 
 transformer = type_checker.TypeAST.transformer(LowerControl)
 
-@transformer.case('Expr')
-def expr(state, node):
-    if node.tag == 'variable':
-        return \
-            Node(
-                'variable',
-                name = state.env.get(node.name, node.name),
-                ty = node.ty,
-            )
-    else:
-        return transformer.default_transform('Expr', state, node)
-
 @transformer.case('Statement')
 def statement(state, node):
     if node.tag == 'return':
@@ -109,32 +95,28 @@ def statement(state, node):
         state.current_ebb.terminator = return_(expr)
         state.current_ebb_name = None
     elif node.tag == 'break':
-        state.current_ebb.terminator = jump(state.env['$break_block'])
+        raise NotImplementedError()
         state.current_ebb_name = None
     elif node.tag == 'if_statement':
         before_block = state.current_ebb_name
         true_block = state.new_ebb()
         false_block = state.new_ebb()
         after_block = state.new_ebb()
-        env = state.env
 
         condition = transformer.transform('Expr', state, node.condition)
         state.ebbs[before_block].terminator = \
             conditional(condition, true_block, false_block)
 
-        state.env = Environment({}, env)
         state.current_ebb_name = true_block
         transformer.transform(List('Statement'), state, node.true_side)
         if state.current_ebb_name:
             state.current_ebb.terminator = jump(after_block)
 
-        state.env = Environment({}, env)
         state.current_ebb_name = false_block
         transformer.transform(List('Statement'), state, node.false_side)
         if state.current_ebb_name:
             state.current_ebb.terminator = jump(after_block)
 
-        state.env = env
         state.current_ebb_name = after_block
     elif node.tag == 'loop_statement':
         before_block = state.current_ebb_name
@@ -142,30 +124,9 @@ def statement(state, node):
         after_block = state.new_ebb()
         state.ebbs[before_block].terminator = jump(start_block)
         state.current_ebb_name = start_block
-        state.env = \
-            Environment(
-                {
-                    '$break_block': after_block,
-                },
-                state.env,
-            )
         transformer.transform(List('Statement'), state, node.body)
-        state.env = state.env.parent
         state.current_ebb.terminator = jump(start_block)
         state.current_ebb_name = after_block
-    elif node.tag == 'let_statement':
-        name = next(state.var_names)
-        state.preamble.append((name, node.ty))
-        state.env[node.name] = name
-        expr = transformer.transform(OrNone('Expr'), state, node.expr)
-        state.current_ebb.statements.append(
-            Node(
-                'let_statement',
-                name = name,
-                ty = node.ty,
-                expr = expr,
-            )
-        )
     elif node.tag == 'match':
         expr = transformer.transform('Expr', state, node.expr)
         cases = []
