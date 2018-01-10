@@ -8,6 +8,7 @@ import kind_checker
 import type_checker
 import lower_control_flow
 import reorganize
+import monomorphize
 
 def parse(src):
     tokens = lexer.Lexer(src).lex()
@@ -36,6 +37,7 @@ def main():
     modules = apply_module_pass(type_checker.type_check, modules)
     things = reorganize.reorganize(modules)
     things = lower_control_flow.lower_control_flow(things)
+    instances = monomorphize.monomorphize(things)
 
     raise NotImplementedError()
 
