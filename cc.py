@@ -29,8 +29,6 @@ def apply_module_pass(f, modules):
     return output
 
 def main():
-    checked_module_interfaces = {}
-    checked_decls = {}
     modules = importer.Importer(parse).load_all(sys.argv[1])
 
     modules = map_modules(sort_checker.sort_check, modules)

@@ -162,4 +162,11 @@ def transform_decl(node):
         return node
 
 def lower_control_flow(things):
-    raise NotImplementedError()
+    values = {}
+    for key, value in things.values.items():
+        values[key] = transform_decl(value)
+    return \
+        SimpleNamespace(
+            types = things.types,
+            values = values,
+        )
