@@ -9,8 +9,8 @@ def reorganize(modules):
             if decl.tag in ['function', 'constant', 'extern']:
                 values[(module_name, decl.name)] = decl
             elif decl.tag == 'struct':
-                values[(module_name, decl.name)] = decl
                 types[(module_name, decl.name)] = decl
+                values[(module_name, decl.name)] = decl
             elif decl.tag == 'import':
                 pass
             else:

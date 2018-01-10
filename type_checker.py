@@ -289,6 +289,20 @@ def decl(state, node):
             )
     return transformer.default_transform('Decl', state, node)
 
+def is_writable(l_expr):
+    if l_expr.tag == 'local':
+        return True
+    elif l_expr.tag == 'global':
+        return False
+    elif l_expr.tag == 'primitive':
+        return False
+    elif l_expr.tag == 'field_access':
+        return is_writable(l_expr.l_expr)
+    elif l_expr.tag == 'array_access':
+        return is_writable(l_expr.l_expr)
+    print(l_expr.tag)
+    raise NotImplementedError()
+
 @transformer.case('Statement')
 def statement(state, node):
     if node.tag == 'let_statement':
@@ -361,6 +375,17 @@ def statement(state, node):
                 'match',
                 expr = expr,
                 matches = matches,
+            )
+    elif node.tag == 'assignment':
+        expr = transformer.transform('Expr', state, node.expr)
+        l_expr = transformer.transform('LExpr', state, node.l_expr)
+        if not is_writable(l_expr):
+            raise TypeError()
+        return \
+            Node(
+                'assignment',
+                l_expr = l_expr,
+                expr = expr,
             )
     return transformer.default_transform('Statement', state, node)
 
