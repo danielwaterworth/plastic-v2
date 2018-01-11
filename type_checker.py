@@ -474,6 +474,8 @@ def expr(state, node):
             raise TypeError()
     elif node.tag == 'apply_type_args':
         function = transformer.transform('Expr', state, node.function)
+        if function.tag not in ['primitive', 'global']:
+            raise TypeError()
         ty = type_apply(function.ty, node.args)
         return \
             Node(

@@ -1,5 +1,3 @@
-import new_code_generator
-
 class LLVMWriter:
     def __init__(self, fd):
         self.fd = fd

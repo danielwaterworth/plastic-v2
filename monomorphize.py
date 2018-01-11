@@ -1,9 +1,22 @@
 from ir import *
 from types import SimpleNamespace
 import collections
+import lower_control_flow
 
 class MonomorphizationError(Exception):
     pass
+
+find_value_instances = \
+    lower_control_flow.LowerControl.transformer(
+        lower_control_flow.LowerControl
+    )
+
+@find_value_instances.case('Expr')
+def expr(state, node):
+    if node.tag == 'apply_type_args':
+        key = node.function.module_name, node.function.name
+        state.instances.values[key].add(node.args)
+    find_value_instances.default_transform('Expr', state, node)
 
 def type_produce_instances(ty):
     output = empty_instances()
@@ -11,19 +24,27 @@ def type_produce_instances(ty):
 
 def value_produce_instances(value):
     output = empty_instances()
+    find_value_instances.transform('Decl', output, value)
     return output
 
 def type_produce_requirements(ty):
-    raise NotImplementedError()
+    return []
 
 def value_produce_requirements(value):
-    raise NotImplementedError()
+    return []
 
 def empty_instances():
     return \
         SimpleNamespace(
             values = collections.defaultdict(set),
             types = collections.defaultdict(set),
+        )
+
+def copy_instances(instances):
+    return \
+        SimpleNamespace(
+            values = collections.defaultdict(set, instances.values),
+            types = collections.defaultdict(set, instances.types),
         )
 
 def update_instances(instances, extra):
@@ -40,20 +61,26 @@ class Instantiator:
         self.requirements = requirements
 
     def instantiate(self):
-        instances_to_check = dict(self.instances)
+        instances_to_check = copy_instances(self.instances)
         instances_to_check_next = empty_instances()
         for i in range(100):
             for t in ['values', 'types']:
                 for name, ty_args in getattr(instances_to_check, t):
-                    args, new_requirements = getattr(self.requirements, t)[name]
+                    args, new_requirements = \
+                        getattr(self.requirements, t)[name]
                     new_requirements = \
                         substitute(new_requirements, dict(zip(args, ty_args)))
                     for t in ['values', 'types']:
                         for name, ty_args in getattr(new_requirements, t):
                             s = getattr(instances_to_check_next, t)[name]
                             s.add(ty_args)
-            instance_to_check = instances_to_check_next
+            instances_to_check = instances_to_check_next
             instances_to_check_next = empty_instances()
+
+            size = \
+                len(instances_to_check.values) + len(instances_to_check.types)
+            if size == 0:
+                break
         else:
             raise MonomorphizationError()
 

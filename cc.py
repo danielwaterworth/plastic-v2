@@ -1,14 +1,16 @@
 import sys
 
+import code_generator
 import importer
-import lexer
-import plst_parser
-import sort_checker
 import kind_checker
-import type_checker
+import lexer
 import lower_control_flow
-import reorganize
 import monomorphize
+import output
+import plst_parser
+import reorganize
+import sort_checker
+import type_checker
 
 def parse(src):
     tokens = lexer.Lexer(src).lex()
@@ -38,8 +40,7 @@ def main():
     things = reorganize.reorganize(modules)
     things = lower_control_flow.lower_control_flow(things)
     instances = monomorphize.monomorphize(things)
-
-    raise NotImplementedError()
+    cg_decls = code_generator.generate(things, instances)
 
     with open(sys.argv[2], 'w') as fd:
         writer = output.LLVMWriter(fd)
