@@ -2,7 +2,7 @@ from ir import *
 import itertools
 
 class FunctionWriter:
-    def __init__(self, code_generator):
+    def __init__(self):
         self.current_basic_block = None
         self.basic_blocks = []
         self.variable_names = \
